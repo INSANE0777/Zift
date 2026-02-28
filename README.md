@@ -19,14 +19,15 @@ npm install -g @7nsane/zift
 ## Usage
 
 ```bash
+# NEW: Secure Installer Mode (Scan + Install)
+@7nsane/zift install <package-name>
+@7nsane/zift i <package-name>
+
 # Scan current directory
 @7nsane/zift .
 
-# Scan a specific package or directory
+# Scan a specific folder
 @7nsane/zift ./node_modules/example-pkg
-
-# Output result in JSON format for CI/CD pipelines
-@7nsane/zift . --format json
 ```
 
 ## Rule Transparency

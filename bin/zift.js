@@ -11,190 +11,187 @@ async function main() {
   const args = process.argv.slice(2);
   let target = '.';
   let format = 'text';
+  let isInstallMode = false;
 
-  // Basic arg parsing
+  // 1. Setup Command
+  if (args[0] === 'setup') {
+    await runSetup();
+    return;
+  }
+
+  // 2. Installation Verbs
+  if (args[0] === 'install' || args[0] === 'i') {
+    isInstallMode = true;
+    target = args.find((a, i) => i > 0 && !a.startsWith('-')) || '.';
+  }
+
+  if (args.includes('--zift')) {
+    isInstallMode = true;
+    target = args.find(a => !a.startsWith('-') && !['install', 'i', 'npm'].includes(a)) || '.';
+  }
+
+  // 3. Flags
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--format' && args[i + 1]) {
       format = args[i + 1];
       i++;
-    } else if (!args[i].startsWith('-')) {
-      target = args[i];
     }
   }
 
-  // Determine if target is local path or remote package
+  // 4. No Args? Show Help
+  if (args.length === 0) {
+    showHelp();
+    return;
+  }
+
+  // 5. Execution
   const isLocal = fs.existsSync(target) && fs.lstatSync(target).isDirectory();
 
   if (isLocal) {
     await runLocalScan(target, format);
   } else {
-    // Treat as remote package name
-    await runRemoteAudit(target, format);
+    await runRemoteAudit(target, format, isInstallMode);
   }
+}
+
+async function runSetup() {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  console.log(chalk.blue.bold('\n🛡️  Zift Secure Alias Setup'));
+  console.log(chalk.gray('Configure `npm install --zift` for automatic security audits.\n'));
+
+  const question = chalk.white('Add the Zift secure wrapper to your shell profile? (y/n): ');
+
+  rl.question(question, (answer) => {
+    rl.close();
+    if (['y', 'yes'].includes(answer.toLowerCase())) {
+      try {
+        if (os.platform() === 'win32') {
+          setupWindows();
+        } else {
+          setupUnix();
+        }
+        console.log(chalk.green('\n✅ Setup complete! Please RESTART your terminal.'));
+        console.log(chalk.gray('Try: npm install <pkg> --zift'));
+      } catch (e) {
+        console.error(chalk.red('\n❌ Setup failed: ') + e.message);
+      }
+    } else {
+      console.log(chalk.yellow('\nSetup cancelled.'));
+    }
+  });
+}
+
+function setupWindows() {
+  const psFunction = `
+# Zift Secure Alias
+function npm {
+    if ($args -contains "--zift") {
+        $pkg = $args | Where-Object { $_ -ne "install" -and $_ -ne "i" -and $_ -ne "--zift" } | Select-Object -First 1
+        Write-Host "\n🛡️ Zift: Intercepting installation for audit...\n" -ForegroundColor Green
+        npx @7nsane/zift@latest install $pkg
+    } else {
+        & (Get-Command npm.cmd).Definition @args
+    }
+}
+`;
+  const profilePath = cp.execSync('powershell -NoProfile -Command "echo $PROFILE"').toString().trim();
+  const profileDir = path.dirname(profilePath);
+  if (!fs.existsSync(profileDir)) fs.mkdirSync(profileDir, { recursive: true });
+  fs.appendFileSync(profilePath, psFunction);
+}
+
+function setupUnix() {
+  const bashFunction = `
+# Zift Secure Alias
+npm() {
+  if [[ "$*" == *"--zift"* ]]; then
+    pkg=$(echo "$@" | sed 's/install//g; s/ i //g; s/--zift//g' | xargs)
+    npx @7nsane/zift@latest install $pkg
+  else
+    command npm "$@"
+  fi
+}
+`;
+  const home = os.homedir();
+  const profiles = [path.join(home, '.bashrc'), path.join(home, '.zshrc')];
+  profiles.forEach(p => { if (fs.existsSync(p)) fs.appendFileSync(p, bashFunction); });
 }
 
 async function runLocalScan(targetDir, format) {
   const scanner = new PackageScanner(targetDir);
-  if (format === 'text') {
-    process.stdout.write(chalk.blue(`\n🔍 Scanning local directory at ${path.resolve(targetDir)}...\n`));
-  }
-
+  if (format === 'text') console.log(chalk.blue(`\n🔍 Scanning local directory: ${path.resolve(targetDir)}`));
   try {
     const findings = await scanner.scan();
     handleFindings(findings, format, targetDir);
-  } catch (err) {
-    handleError(err, format);
-  }
+  } catch (err) { handleError(err, format); }
 }
 
-async function runRemoteAudit(packageName, format) {
-  if (format === 'text') {
-    console.log(chalk.blue(`\n🌍 Remote Audit: Attempting to pre-scan package '${packageName}'...`));
-  }
-
+async function runRemoteAudit(packageName, format, installOnSuccess) {
+  if (format === 'text') console.log(chalk.blue(`\n🌍 Remote Audit: Pre-scanning package '${packageName}'...`));
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zift-audit-'));
-
   try {
-    // Download tarball
     cp.execSync(`npm pack ${packageName}`, { cwd: tmpDir, stdio: 'ignore' });
     const tarball = fs.readdirSync(tmpDir).find(f => f.endsWith('.tgz'));
-
-    // Extract
     cp.execSync(`tar -xzf ${tarball}`, { cwd: tmpDir });
     const scanPath = path.join(tmpDir, 'package');
-
     const scanner = new PackageScanner(scanPath);
     const findings = await scanner.scan();
-
-    // Custom reporting for remote audit
-    if (format === 'text') {
-      console.log(chalk.green(`✅ Pre-scan of '${packageName}' complete.`));
-      const s = getSummary(findings);
-      console.log(chalk.bold('Risk Profile: ') +
-        (s.Critical > 0 ? chalk.red.bold('CRITICAL') :
-          s.High > 0 ? chalk.red('HIGH') :
-            s.Medium > 0 ? chalk.yellow('MEDIUM') : chalk.green('SECURE')));
-    }
-
     handleFindings(findings, format, scanPath, true);
 
-    // Interactive Prompt
     if (format === 'text') {
       const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-      const question = findings.length > 0
-        ? chalk.yellow(`\n⚠️  Suspicious patterns found. Still install '${packageName}'? (yes/no): `)
-        : chalk.blue(`\nProceed with installation of '${packageName}'? (yes/no): `);
+      const promptText = findings.length > 0
+        ? chalk.yellow(`\n⚠️  Suspicious patterns found. Still install '${packageName}'? (y/n): `)
+        : chalk.blue(`\nAudit passed. Proceed with installation of '${packageName}'? (y/n): `);
 
-      rl.question(question, (answer) => {
+      rl.question(promptText, (answer) => {
         rl.close();
-        if (answer.toLowerCase() === 'yes' || answer.toLowerCase() === 'y') {
+        if (['y', 'yes'].includes(answer.toLowerCase())) {
           console.log(chalk.blue(`\n📦 Installing ${packageName}...`));
-          try {
-            cp.execSync(`npm install ${packageName}`, { stdio: 'inherit' });
-            console.log(chalk.green(`\n✅ ${packageName} installed successfully.`));
-          } catch (e) {
-            console.error(chalk.red(`\n❌ Installation failed.`));
-          }
-          cleanupAndExit(tmpDir, 0);
-        } else {
-          console.log(chalk.red(`\n❌ Installation aborted by user.`));
-          cleanupAndExit(tmpDir, 0);
+          cp.execSync(`npm install ${packageName}`, { stdio: 'inherit' });
+          console.log(chalk.green(`\n✅ ${packageName} installed successfully.`));
         }
+        cleanupAndExit(tmpDir, 0);
       });
-    } else {
-      cleanupAndExit(tmpDir, 0);
-    }
-
-  } catch (err) {
-    console.error(chalk.red(`\n❌ Remote Audit failed: Ensure '${packageName}' exists on npm.`));
-    cleanupAndExit(tmpDir, 1);
-  }
+    } else { cleanupAndExit(tmpDir, 0); }
+  } catch (err) { cleanupAndExit(tmpDir, 1); }
 }
 
 function handleFindings(findings, format, targetDir, skipExit = false) {
   if (format === 'json') {
-    console.log(JSON.stringify({
-      target: targetDir,
-      timestamp: new Date().toISOString(),
-      findings: findings,
-      summary: getSummary(findings)
-    }, null, 2));
+    process.stdout.write(JSON.stringify({ target: targetDir, findings, summary: { Critical: findings.filter(f => f.classification === 'Critical').length, High: findings.filter(f => f.classification === 'High').length, Medium: findings.filter(f => f.classification === 'Medium').length, Low: findings.filter(f => f.classification === 'Low').length } }, null, 2));
     if (!skipExit) process.exit(findings.some(f => f.score >= 90) ? 1 : 0);
     return;
   }
-
   if (findings.length === 0) {
-    if (!skipExit) {
-      console.log(chalk.green('\n✅ No suspicious patterns detected. All modules within safety thresholds.'));
-      process.exit(0);
-    }
+    if (!skipExit) { console.log(chalk.green('\n✅ No suspicious patterns detected. All modules safe.')); process.exit(0); }
     return;
   }
-
-  console.log(chalk.yellow(`\n⚠️  Found ${findings.length} suspicious patterns.\n`));
-
-  findings.forEach(finding => {
-    const colorMap = { 'Critical': chalk.red.bold, 'High': chalk.red, 'Medium': chalk.yellow, 'Low': chalk.blue };
-    const theme = colorMap[finding.classification] || chalk.white;
-
-    console.log(theme(`[${finding.classification}] ${finding.id} ${finding.name} (Risk Score: ${finding.score})`));
-    console.log(chalk.gray(`Description: ${finding.description}`));
-
-    finding.triggers.forEach(t => {
-      console.log(chalk.white(`  - ${t.type} in ${t.file}:${t.line} [${t.context}]`));
-    });
-
-    if (finding.isLifecycle) {
-      console.log(chalk.magenta(`  Context: Multiplier applied due to execution in lifecycle script.`));
-    }
+  findings.forEach(f => {
+    const color = { 'Critical': chalk.red.bold, 'High': chalk.red, 'Medium': chalk.yellow, 'Low': chalk.blue }[f.classification];
+    console.log(color(`[${f.classification}] ${f.id} ${f.name} (Score: ${f.score})`));
+    f.triggers.forEach(t => console.log(chalk.white(`  - ${t.type} in ${t.file}:${t.line} [${t.context}]`)));
     console.log('');
   });
+  if (!skipExit) process.exit(findings[0].score >= 90 ? 1 : 0);
+}
 
-  printSummary(findings);
-
-  if (!skipExit) {
-    const highestScore = findings.length > 0 ? findings[0].score : 0;
-    if (highestScore >= 90) {
-      console.log(chalk.red.bold(`\n❌ FAILED SAFETY CHECK: Critical risk detected (Score: ${highestScore})\n`));
-      process.exit(1);
-    } else {
-      console.log(chalk.green(`\n✔ Safety check completed with minor warnings.\n`));
-      process.exit(0);
-    }
-  }
+function showHelp() {
+  console.log(chalk.blue.bold('\n🛡️  Zift - The Elite Security Scanner\n'));
+  console.log('Usage:');
+  console.log('  zift setup           Configure secure npm wrapper');
+  console.log('  zift install <pkg>   Audit and install package');
+  console.log('  zift .               Scan local directory');
 }
 
 function cleanupAndExit(dir, code) {
   if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
-  if (code !== undefined) process.exit(code);
+  process.exit(code);
 }
 
 function handleError(err, format) {
-  if (format === 'json') {
-    console.error(JSON.stringify({ error: err.message }));
-  } else {
-    console.error(chalk.red(`\n❌ Fatal Error: ${err.message}`));
-  }
+  console.error(chalk.red(`\n❌ Error: ${err.message}`));
   process.exit(1);
-}
-
-function getSummary(findings) {
-  const summary = { Critical: 0, High: 0, Medium: 0, Low: 0 };
-  findings.forEach(f => {
-    if (summary[f.classification] !== undefined) {
-      summary[f.classification]++;
-    }
-  });
-  return summary;
-}
-
-function printSummary(findings) {
-  const s = getSummary(findings);
-  console.log(chalk.bold('Severity Summary:'));
-  console.log(chalk.red(`  Critical: ${s.Critical}`));
-  console.log(chalk.red(`  High:     ${s.High}`));
-  console.log(chalk.yellow(`  Medium:   ${s.Medium}`));
-  console.log(chalk.blue(`  Low:      ${s.Low}`));
 }
 
 main();
