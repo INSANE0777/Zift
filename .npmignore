@@ -1,10 +1,14 @@
 *.log
 .npmrc
 .npmignore
+node_modules/
 v1_launch_pack/
 tests/
+audit-space/
+zift-user-test/
 .git/
 .gitignore
 implementation_plan.md
 walkthrough.md
 task.md
+.system_generated/
