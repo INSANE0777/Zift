@@ -12,10 +12,10 @@ async function runTest() {
     if (findings.length > 0) {
         console.log(`✅ Success: Detected ${findings.length} findings.`);
         findings.forEach(f => {
-            console.log(` - [${f.classification}] ${f.ruleId} (Score: ${f.score})`);
+            console.log(` - [${f.classification}] ${f.id} (Score: ${f.score})`);
         });
 
-        const hasExfil = findings.some(f => f.ruleId === 'ENV_EXFILTRATION');
+        const hasExfil = findings.some(f => f.id === 'ZFT-001' || f.alias === 'ENV_EXFILTRATION');
         if (hasExfil) {
             console.log('✅ Success: Correctly identified ENV_EXFILTRATION.');
         } else {

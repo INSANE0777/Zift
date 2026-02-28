@@ -1,6 +1,7 @@
 const RULES = [
     {
-        id: 'ENV_EXFILTRATION',
+        id: 'ZFT-001',
+        alias: 'ENV_EXFILTRATION',
         name: 'Environment Variable Exfiltration',
         requires: ['ENV_READ', 'NETWORK_SINK'],
         optional: ['OBFUSCATION'],
@@ -8,21 +9,24 @@ const RULES = [
         description: 'Detection of environment variables being read and sent over the network.'
     },
     {
-        id: 'SENSITIVE_FILE_EXFILTRATION',
+        id: 'ZFT-002',
+        alias: 'SENSITIVE_FILE_EXFILTRATION',
         name: 'Sensitive File Exfiltration',
         requires: ['FILE_READ_SENSITIVE', 'NETWORK_SINK'],
         baseScore: 50,
         description: 'Detection of sensitive files (e.g., .ssh, .env) being read and sent over the network.'
     },
     {
-        id: 'PERSISTENCE_ATTEMPT',
+        id: 'ZFT-003',
+        alias: 'PERSISTENCE_ATTEMPT',
         name: 'Persistence Attempt',
         requires: ['FILE_WRITE_STARTUP'],
         baseScore: 60,
         description: 'Detection of attempts to write to system startup directories.'
     },
     {
-        id: 'OBFUSCATED_EXECUTION',
+        id: 'ZFT-004',
+        alias: 'OBFUSCATED_EXECUTION',
         name: 'Obfuscated Execution',
         requires: ['OBFUSCATION', 'DYNAMIC_EXECUTION'],
         baseScore: 40,

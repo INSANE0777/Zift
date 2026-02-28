@@ -66,7 +66,8 @@ class SafetyEngine {
         }
 
         return {
-            ruleId: rule.id,
+            id: rule.id,
+            alias: rule.alias,
             name: rule.name,
             score: Math.min(finalScore, 100),
             triggers: triggers,
