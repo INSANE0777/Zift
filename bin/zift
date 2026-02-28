@@ -1,0 +1,60 @@
+#!/usr/bin/env node
+const PackageScanner = require('../src/scanner');
+const chalk = require('chalk');
+const path = require('path');
+
+async function main() {
+  const targetDir = process.argv[2] || '.';
+  const scanner = new PackageScanner(targetDir);
+
+  process.stdout.write(chalk.blue(`\n🔍 Scanning package at ${path.resolve(targetDir)}...\n`));
+
+  try {
+    const findings = await scanner.scan();
+    
+    if (findings.length === 0) {
+      console.log(chalk.green('\n✅ No suspicious patterns detected. All modules within safety thresholds.'));
+      process.exit(0);
+    }
+
+    console.log(chalk.yellow(`\n⚠️  Scan complete. Found ${findings.length} suspicious patterns.\n`));
+
+    findings.forEach(finding => {
+      const colorMap = {
+        'Critical': chalk.red.bold,
+        'High': chalk.red,
+        'Medium': chalk.yellow,
+        'Low': chalk.blue
+      };
+      
+      const theme = colorMap[finding.classification];
+
+      console.log(theme(`[${finding.classification}] ${finding.name} (Risk Score: ${finding.score})`));
+      console.log(chalk.gray(`Description: ${finding.description}`));
+      
+      finding.triggers.forEach(t => {
+        console.log(chalk.white(`  - ${t.type} in ${t.file}:${t.line} [${t.context}]`));
+      });
+      
+      if (finding.isLifecycle) {
+        console.log(chalk.magenta(`  Context: Multiplier applied due to execution in lifecycle script.`));
+      }
+      console.log('');
+    });
+
+    const highestScore = findings[0].score;
+    if (highestScore >= 90) {
+      console.log(chalk.red.bold(`\n❌ FAILED SAFETY CHECK: Critical risk detected (Score: ${highestScore})\n`));
+      process.exit(1);
+    } else {
+      console.log(chalk.green(`\n✔ Safety check completed with minor warnings.\n`));
+      process.exit(0);
+    }
+
+  } catch (err) {
+    console.error(chalk.red(`\n❌ Fatal Error: ${err.message}`));
+    process.exit(1);
+  }
+}
+
+main();

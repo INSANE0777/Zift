@@ -1,0 +1,23 @@
+{
+  "name": "zift",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/scanner.js",
+  "bin": {
+    "zift": "./bin/zift"
+  },
+  "scripts": {
+    "test": "node tests/verify.js",
+    "scan": "node bin/zift"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "acorn": "^8.16.0",
+    "acorn-walk": "^8.3.5",
+    "chalk": "^4.1.2",
+    "glob": "^13.0.6"
+  }
+}

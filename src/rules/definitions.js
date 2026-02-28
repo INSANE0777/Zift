@@ -1,0 +1,40 @@
+const RULES = [
+    {
+        id: 'ENV_EXFILTRATION',
+        name: 'Environment Variable Exfiltration',
+        requires: ['ENV_READ', 'NETWORK_SINK'],
+        optional: ['OBFUSCATION'],
+        baseScore: 40,
+        description: 'Detection of environment variables being read and sent over the network.'
+    },
+    {
+        id: 'SENSITIVE_FILE_EXFILTRATION',
+        name: 'Sensitive File Exfiltration',
+        requires: ['FILE_READ_SENSITIVE', 'NETWORK_SINK'],
+        baseScore: 50,
+        description: 'Detection of sensitive files (e.g., .ssh, .env) being read and sent over the network.'
+    },
+    {
+        id: 'PERSISTENCE_ATTEMPT',
+        name: 'Persistence Attempt',
+        requires: ['FILE_WRITE_STARTUP'],
+        baseScore: 60,
+        description: 'Detection of attempts to write to system startup directories.'
+    },
+    {
+        id: 'OBFUSCATED_EXECUTION',
+        name: 'Obfuscated Execution',
+        requires: ['OBFUSCATION', 'DYNAMIC_EXECUTION'],
+        baseScore: 40,
+        description: 'Detection of high-entropy strings being executed via eval or Function constructor.'
+    }
+];
+
+const CATEGORIES = {
+    SOURCES: ['ENV_READ', 'FILE_READ_SENSITIVE'],
+    SINKS: ['NETWORK_SINK', 'DYNAMIC_EXECUTION'],
+    OBFUSCATION: ['OBFUSCATION'],
+    PERSISTENCE: ['FILE_WRITE_STARTUP']
+};
+
+module.exports = { RULES, CATEGORIES };
