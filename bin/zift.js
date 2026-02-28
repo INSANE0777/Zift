@@ -13,13 +13,11 @@ async function main() {
   let format = 'text';
   let isInstallMode = false;
 
-  // 1. Setup Command
   if (args[0] === 'setup') {
     await runSetup();
     return;
   }
 
-  // 2. Installation Verbs
   if (args[0] === 'install' || args[0] === 'i') {
     isInstallMode = true;
     target = args.find((a, i) => i > 0 && !a.startsWith('-')) || '.';
@@ -30,7 +28,6 @@ async function main() {
     target = args.find(a => !a.startsWith('-') && !['install', 'i', 'npm'].includes(a)) || '.';
   }
 
-  // 3. Flags
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--format' && args[i + 1]) {
       format = args[i + 1];
@@ -38,13 +35,11 @@ async function main() {
     }
   }
 
-  // 4. No Args? Show Help
   if (args.length === 0) {
     showHelp();
     return;
   }
 
-  // 5. Execution
   const isLocal = fs.existsSync(target) && fs.lstatSync(target).isDirectory();
 
   if (isLocal) {
@@ -65,13 +60,16 @@ async function runSetup() {
     rl.close();
     if (['y', 'yes'].includes(answer.toLowerCase())) {
       try {
+        let reloadCmd = '';
         if (os.platform() === 'win32') {
-          setupWindows();
+          reloadCmd = setupWindows();
         } else {
-          setupUnix();
+          reloadCmd = setupUnix();
         }
-        console.log(chalk.green('\n✅ Setup complete! Please RESTART your terminal.'));
-        console.log(chalk.gray('Try: npm install <pkg> --zift'));
+        console.log(chalk.green('\n✅ Setup complete! Profile updated.'));
+        console.log(chalk.yellow.bold(`\nTo activate IMMEDIATELY, run this command:`));
+        console.log(chalk.cyan.inverse(`  ${reloadCmd}  \n`));
+        console.log(chalk.gray('Alternatively, simply restart your terminal.'));
       } catch (e) {
         console.error(chalk.red('\n❌ Setup failed: ') + e.message);
       }
@@ -98,6 +96,7 @@ function npm {
   const profileDir = path.dirname(profilePath);
   if (!fs.existsSync(profileDir)) fs.mkdirSync(profileDir, { recursive: true });
   fs.appendFileSync(profilePath, psFunction);
+  return '. $PROFILE';
 }
 
 function setupUnix() {
@@ -114,7 +113,14 @@ npm() {
 `;
   const home = os.homedir();
   const profiles = [path.join(home, '.bashrc'), path.join(home, '.zshrc')];
-  profiles.forEach(p => { if (fs.existsSync(p)) fs.appendFileSync(p, bashFunction); });
+  let reloadTarget = '~/.zshrc';
+  profiles.forEach(p => {
+    if (fs.existsSync(p)) {
+      fs.appendFileSync(p, bashFunction);
+      if (p.endsWith('.bashrc')) reloadTarget = '~/.bashrc';
+    }
+  });
+  return `source ${reloadTarget}`;
 }
 
 async function runLocalScan(targetDir, format) {
