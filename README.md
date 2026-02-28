@@ -13,20 +13,20 @@
 ## Installation
 
 ```bash
-npm install -g zift
+npm install -g @7nsane/zift
 ```
 
 ## Usage
 
 ```bash
 # Scan current directory
-zift .
+@7nsane/zift .
 
 # Scan a specific package or directory
-zift ./node_modules/example-pkg
+@7nsane/zift ./node_modules/example-pkg
 
 # Output result in JSON format for CI/CD pipelines
-zift . --format json
+@7nsane/zift . --format json
 ```
 
 ## Rule Transparency

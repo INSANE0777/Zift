@@ -1,0 +1,10 @@
+*.log
+.npmrc
+.npmignore
+v1_launch_pack/
+tests/
+.git/
+.gitignore
+implementation_plan.md
+walkthrough.md
+task.md
