@@ -1,7 +1,7 @@
 {
   "name": "zift",
   "version": "1.0.0",
-  "description": "",
+  "description": "A high-performance, deterministic security scanner for npm packages.",
   "main": "src/scanner.js",
   "bin": {
     "zift": "./bin/zift"
@@ -10,8 +10,14 @@
     "test": "node tests/verify.js",
     "scan": "node bin/zift"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "security",
+    "scanner",
+    "npm",
+    "malware",
+    "ast"
+  ],
+  "author": "Zift Team",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {

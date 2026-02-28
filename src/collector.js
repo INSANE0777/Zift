@@ -14,6 +14,8 @@ class ASTCollector {
         };
         this.flows = [];
         this.entropyThreshold = 4.8;
+        this.maxFileSize = 512 * 1024; // 512KB cap for static analysis
+        this.maxStringLengthForEntropy = 2048; // Don't calculate entropy for massive blobs
     }
 
     collect(code, filePath) {
@@ -31,7 +33,7 @@ class ASTCollector {
 
         walk.ancestor(ast, {
             Literal: (node) => {
-                if (typeof node.value === 'string' && node.value.length > 5) {
+                if (typeof node.value === 'string' && node.value.length > 20 && node.value.length < this.maxStringLengthForEntropy) {
                     const entropy = calculateEntropy(node.value);
                     if (entropy > this.entropyThreshold) {
                         this.facts.OBFUSCATION.push({
@@ -74,13 +76,17 @@ class ASTCollector {
                 }
             },
             MemberExpression: (node) => {
-                const memberCode = this.getSourceCode(node);
+                const objectCode = this.getSourceCode(node.object);
                 // Detect process.env
-                if (memberCode === 'process.env' || memberCode.startsWith('process.env.')) {
+                if (objectCode === 'process.env' || objectCode === 'process["env"]' || objectCode === "process['env']") {
+                    const property = node.property.name || (node.property.type === 'Literal' ? node.property.value : null);
+                    const whitelist = ['NODE_ENV', 'TIMING', 'DEBUG', 'VERBOSE', 'CI', 'APPDATA', 'HOME', 'USERPROFILE', 'PATH', 'PWD'];
+                    if (whitelist.includes(property)) return; // Whitelist common env check
+
                     this.facts.ENV_READ.push({
                         file: filePath,
                         line: node.loc.start.line,
-                        variable: memberCode
+                        variable: property ? `process.env.${property}` : 'process.env'
                     });
                 }
             },
@@ -101,12 +107,12 @@ class ASTCollector {
     }
 
     isNetworkSink(calleeCode) {
-        const sinks = [
-            'http.request', 'https.request', 'http.get', 'https.get',
-            'fetch', 'axios', 'request', 'net.connect', 'dns.lookup',
-            'dns.resolve', 'child_process.exec', 'child_process.spawn'
-        ];
-        return sinks.some(sink => calleeCode.includes(sink));
+        const methodSinks = ['http.request', 'https.request', 'http.get', 'https.get', 'net.connect', 'dns.lookup', 'dns.resolve', 'fetch', 'axios'];
+
+        // Match methods like http.request but avoid requestIdleCallback or local 'request' variables
+        return methodSinks.some(sink => {
+            return calleeCode === sink || calleeCode.endsWith('.' + sink);
+        }) && !calleeCode.includes('IdleCallback');
     }
 
     isSensitiveFileRead(calleeCode, node) {

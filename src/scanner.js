@@ -30,7 +30,13 @@ class PackageScanner {
 
         for (const file of files) {
             const relativePath = path.relative(this.packageDir, file);
-            if (relativePath.includes('node_modules') || relativePath.startsWith('.')) continue;
+
+            // Refined ignore logic
+            const ignorePatterns = ['node_modules', '.git', 'test', 'dist', 'coverage', 'docs', '.github'];
+            if (ignorePatterns.some(p => relativePath.includes(p)) || relativePath.startsWith('.')) continue;
+
+            const stats = fs.statSync(file);
+            if (stats.size > 512 * 1024) continue; // Skip files > 512KB
 
             const code = fs.readFileSync(file, 'utf8');
             const { facts, flows } = this.collector.collect(code, file);
@@ -54,7 +60,8 @@ class PackageScanner {
                 const fullPath = path.join(dir, file);
                 const stat = fs.statSync(fullPath);
                 if (stat && stat.isDirectory()) {
-                    if (file !== 'node_modules' && file !== '.git') {
+                    const ignoreDirs = ['node_modules', '.git', 'dist', 'build', 'coverage', 'test', 'tests'];
+                    if (!ignoreDirs.includes(file) && !file.startsWith('.')) {
                         results.push(...getJsFiles(fullPath));
                     }
                 } else if (file.endsWith('.js')) {

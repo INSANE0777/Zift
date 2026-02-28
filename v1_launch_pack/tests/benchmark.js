@@ -33,6 +33,20 @@ async function benchmark() {
         const findings = await scanner.scan();
         const duration = (Date.now() - start) / 1000;
 
+        const criticalItems = findings.filter(f => f.classification === 'Critical');
+        const highItems = findings.filter(f => f.classification === 'High');
+
+        if (criticalItems.length > 0 || highItems.length > 0) {
+            console.log(`\n🚨 Details for ${pkg}:`);
+            [...criticalItems, ...highItems].forEach(f => {
+                console.log(`- [${f.classification}] ${f.id} (${f.alias}): ${f.score}`);
+                f.triggers.forEach(t => {
+                    console.log(`  └─ ${t.type} @ ${t.file}:${t.line} (${t.context})`);
+                });
+            });
+            console.log('');
+        }
+
         const critical = findings.filter(f => f.classification === 'Critical').length;
         const high = findings.filter(f => f.classification === 'High').length;
         const medium = findings.filter(f => f.classification === 'Medium').length;

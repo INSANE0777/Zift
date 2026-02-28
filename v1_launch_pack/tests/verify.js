@@ -28,7 +28,14 @@ async function runTest() {
     }
 }
 
-runTest().catch((err) => {
-    console.error(err);
-    process.exit(1);
-});
+async function runVerification() {
+    try {
+        await runTest();
+        console.log('\n\x1b[32mΓ£à Verification Successful: All critical rules detected.\x1b[0m');
+    } catch (err) {
+        console.error(`\n\x1b[31mΓ£û Verification Failed: ${err.message}\x1b[0m`);
+        process.exit(1);
+    }
+}
+
+runVerification();
