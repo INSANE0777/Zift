@@ -6,7 +6,7 @@
 
 **The Symbolically-Intelligent Ecosystem Security Engine for JavaScript.**
 
-Zift v5.0 is the "Intelligence" release, introducing **Symbolic Taint Analysis**. It can track sensitive data through complex code transformations, destructuring, and nested object structures across module boundaries.
+Zift v4.1 is the "Intelligence" release, introducing **Symbolic Taint Analysis**. It can track sensitive data through complex code transformations, destructuring, and nested object structures across module boundaries.
 
 ## 🚀 Key Advancements (v5.0.0)
 
