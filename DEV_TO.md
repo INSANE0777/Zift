@@ -39,23 +39,69 @@ Attackers love hiding code in compiled binaries or large, high-entropy strings. 
 
 ---
 
-## 🚀 How to use Zift
+## �️ Complete Command Reference
 
-### Rapid Scanning
-Scan your project or a specific package in seconds:
+Zift is designed to fit seamlessly into any workflow. Here is a deep dive into every command and flag available in v4.1.0.
 
+### 1. Rapid Scanning
+Analyze any package (remote) or directory (local) for suspicious patterns.
 ```bash
-npx @7nsane/zift scan
+# Scan a remote package from NPM
+npx @7nsane/zift scan express
+
+# Scan the current project directory
+npx @7nsane/zift .
+
+# Output results in JSON for CI/CD pipelines
+npx @7nsane/zift . --format json
 ```
 
-### Proactive Runtime Shielding
-Install the shield in your entry point:
+### 2. The Secure Wrapper (`zift setup`)
+The most powerful way to use Zift is by securing your package manager directly.
+```bash
+npx @7nsane/zift setup
+```
+This adds secure wrappers to your shell (`.bashrc`, `.zshrc`, or PowerShell profile). Once set up, you can use the `--zift` flag with your favorite manager:
+```bash
+npm install lodash --zift    # Audits lodash BEFORE installing
+bun add axios --zift         # Works with Bun too!
+pnpm add chalk --zift        # And PNPM!
+```
 
+### 3. Application Hardening (`zift protect`)
+Run your production application inside the Zift Shield environment without changing a single line of your code.
+```bash
+npx @7nsane/zift protect main.js
+```
+This injects the Zift Shield runtime guard, making your `http` and `child_process` modules immutable and audited.
+
+### 4. Project Initialization
+For long-term security, initialize a local configuration:
+```bash
+npx @7nsane/zift init
+```
+This creates:
+- `.zift.json`: Configure thresholds and parallelization.
+- `.ziftignore`: Custom patterns to exclude from analysis.
+
+---
+
+## 🚀 Advanced Integration Patterns
+
+### CI/CD Security Gate
+Zift returns a non-zero exit code if **Critical** findings (score >= 90) are detected. Use this to block deployments:
+```yaml
+- name: Zift Security Scan
+  run: npx @7nsane/zift . --format json
+```
+
+### Manual Shielding
+If you prefer fine-grained control, you can require the shield manually in your code:
 ```javascript
+// At the very top of your entry file
 require('@7nsane/zift/shield');
 
-// Your app is now protected against unauthorized network calls
-// and shell executions from third-party dependencies.
+// Your application and all its dependencies are now monitored.
 ```
 
 ## 📈 810 Downloads & Counting...
