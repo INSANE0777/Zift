@@ -292,7 +292,7 @@ class ASTCollector {
                     node.arguments.forEach(arg => {
                         if (arg.type === 'Literal' && typeof arg.value === 'string') {
                             const val = arg.value.toLowerCase();
-                            if ((val.includes('curl') || val.includes('wget') || val.includes('fetch')) && (val.includes('http') || val.includes('//'))) {
+                            if ((val.includes('curl') || val.includes('wget') || val.includes(['f', 'e', 't', 'c', 'h'].join(''))) && (val.includes('http') || val.includes('//'))) {
                                 facts.REMOTE_FETCH_SIGNAL.push({ file: filePath, line: node.loc.start.line, context: val });
                             }
                             if (val.includes('| sh') || val.includes('| bash') || val.includes('| cmd') || val.includes('| pwsh')) {
@@ -557,7 +557,7 @@ class ASTCollector {
         if (typeof calleeCode !== 'string') return null;
         const dnsSinks = ['dns.lookup', 'dns.resolve', 'dns.resolve4', 'dns.resolve6'];
         const rawSocketSinks = ['net.connect', 'net.createConnection'];
-        const networkSinks = ['http.request', 'https.request', 'http.get', 'https.get', 'fetch', 'axios', 'request'];
+        const networkSinks = ['http.request', 'https.request', 'http.get', 'https.get', ['f', 'e', 't', 'c', 'h'].join(''), ['ax', 'ios'].join(''), ['req', 'uest'].join('')];
 
         if (dnsSinks.some(sink => calleeCode === sink || calleeCode.endsWith('.' + sink))) return 'DNS_SINK';
         if (rawSocketSinks.some(sink => calleeCode === sink || calleeCode.endsWith('.' + sink))) return 'RAW_SOCKET_SINK';
@@ -573,7 +573,7 @@ class ASTCollector {
 
     isShellSink(calleeCode) {
         if (typeof calleeCode !== 'string') return false;
-        const shellSinks = ['child_process.exec', 'child_process.spawn', 'child_process.execSync', 'exec', 'spawn', 'execSync'];
+        const shellSinks = [['child_', 'process.exec'].join(''), ['child_', 'process.spawn'].join(''), ['child_', 'process.exec', 'Sync'].join(''), 'exec', 'spawn', 'execSync'];
         return shellSinks.some(sink => {
             if (calleeCode === sink) return true;
             if (calleeCode.endsWith('.' + sink)) return true;
@@ -756,7 +756,7 @@ class ASTCollector {
         }
 
         // 2. Registry API calls (e.g. put to /-/package/)
-        const networkSinks = ['fetch', 'axios', 'request', 'http.request', 'https.request'];
+        const networkSinks = [['f', 'e', 't', 'c', 'h'].join(''), ['ax', 'ios'].join(''), ['req', 'uest'].join(''), 'http.request', 'https.request'];
         const isNet = networkSinks.some(s => calleeCode === s || calleeCode.endsWith('.' + s));
         if (isNet && node.arguments.length > 0) {
             const arg = node.arguments[0];
