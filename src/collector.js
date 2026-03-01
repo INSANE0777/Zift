@@ -29,7 +29,19 @@ class ASTCollector {
             EXPORTS: [],
             IMPORTS: [],
             OPAQUE_STRING_SKIP: [],
-            NON_DETERMINISTIC_SINK: []
+            NON_DETERMINISTIC_SINK: [],
+            CREDENTIAL_FILE_ACCESS: [],
+            DISCORD_STORAGE_ACCESS: [],
+            WEBHOOK_SINK: [],
+            EVASION_ENVIRONMENT_CHECK: [],
+            WALLET_HOOK: [],
+            CICD_SECRET_ACCESS: [],
+            WIPER_OPERATION: [],
+            REGISTRY_TAMPER: [],
+            MODULE_TAMPER: [],
+            REVERSE_SHELL_BEHAVIOR: [],
+            FINGERPRINT_SIGNAL: [],
+            PUBLISH_SINK: []
         };
         const flows = [];
         const sourceCode = code;
@@ -124,6 +136,82 @@ class ASTCollector {
                     type: 'default'
                 });
             },
+            Identifier: (node) => {
+                const evasionIds = ['v8debug'];
+                if (evasionIds.includes(node.name)) {
+                    facts.EVASION_ENVIRONMENT_CHECK.push({
+                        file: filePath,
+                        line: node.loc.start.line,
+                        context: node.name
+                    });
+                }
+            },
+            MemberExpression: (node, state, ancestors) => {
+                const memberCode = sourceCode.substring(node.start, node.end);
+
+                // 1. Anti-Analysis / Evasion Check
+                const evasionPatterns = ['debugPort', 'v8debug', 'NODE_OPTIONS'];
+                if (evasionPatterns.some(p => memberCode.includes(p))) {
+                    facts.EVASION_ENVIRONMENT_CHECK.push({
+                        file: filePath,
+                        line: node.loc.start.line,
+                        context: memberCode
+                    });
+                }
+
+                // 2. Wallet DRAINER Hook detection
+                const walletPatterns = ['ethereum', 'solana', 'phantom'];
+                if (walletPatterns.some(p => memberCode.includes(p))) {
+                    facts.WALLET_HOOK.push({
+                        file: filePath,
+                        line: node.loc.start.line,
+                        context: memberCode
+                    });
+                }
+
+                // 3. CI/CD Secret Access
+                const cicdPatterns = ['GITHUB_TOKEN', 'CIRCLECI_TOKEN', 'AZURE_TOKEN', 'TRAVIS_TOKEN', 'GITLAB_TOKEN'];
+                if (cicdPatterns.some(p => memberCode.includes(p))) {
+                    facts.CICD_SECRET_ACCESS.push({
+                        file: filePath,
+                        line: node.loc.start.line,
+                        variable: memberCode
+                    });
+                }
+
+                // 4. OS Fingerprinting (platform, arch, release)
+                const fingerPatterns = ['process.platform', 'process.arch', 'os.platform', 'os.arch', 'os.release', 'os.type'];
+                if (fingerPatterns.some(p => memberCode.includes(p))) {
+                    // Avoid duplicate if it's part of a CallExpression (will be caught there)
+                    const parent = ancestors[ancestors.length - 2];
+                    if (parent && parent.type === 'CallExpression' && parent.callee === node) return;
+
+                    facts.FINGERPRINT_SIGNAL.push({
+                        file: filePath,
+                        line: node.loc.start.line,
+                        context: memberCode
+                    });
+                }
+
+                // 4. process.env access (Moved from redundant visitor)
+                const objectCode = sourceCode.substring(node.object.start, node.object.end);
+                if (objectCode === 'process.env' || objectCode === 'process["env"]' || objectCode === "process['env']") {
+                    const property = node.property.name || (node.property.type === 'Literal' ? node.property.value : null);
+                    const whitelist = ['NODE_ENV', 'TIMING', 'DEBUG', 'VERBOSE', 'CI', 'APPDATA', 'HOME', 'USERPROFILE', 'PATH', 'PWD'];
+                    if (whitelist.includes(property)) return;
+
+                    envAccessCount++;
+                    facts.ENV_READ.push({
+                        file: filePath,
+                        line: node.loc.start.line,
+                        variable: property ? `process.env.${property}` : 'process.env'
+                    });
+
+                    if (envAccessCount > 5) {
+                        facts.MASS_ENV_ACCESS.push({ file: filePath, line: node.loc.start.line, count: envAccessCount });
+                    }
+                }
+            },
             CallExpression: (node, state, ancestors) => {
                 const calleeCode = sourceCode.substring(node.callee.start, node.callee.end);
 
@@ -175,6 +263,23 @@ class ASTCollector {
                         line: node.loc.start.line,
                         callee: calleeCode
                     });
+
+                    // Check for Webhook Sinks
+                    if (netType === 'NETWORK_SINK') {
+                        node.arguments.forEach(arg => {
+                            if (arg.type === 'Literal' && typeof arg.value === 'string') {
+                                const val = arg.value.toLowerCase();
+                                const webhooks = ['discord.com/api/webhooks', 'pipedream.net', 'webhook.site', 'burpcollaborator.net'];
+                                if (webhooks.some(w => val.includes(w))) {
+                                    facts.WEBHOOK_SINK.push({
+                                        file: filePath,
+                                        line: node.loc.start.line,
+                                        url: val
+                                    });
+                                }
+                            }
+                        });
+                    }
                 }
 
                 if (this.isShellSink(calleeCode)) {
@@ -206,10 +311,30 @@ class ASTCollector {
                 }
 
                 if (this.isSensitiveFileRead(calleeCode, node, sourceCode)) {
-                    facts.FILE_READ_SENSITIVE.push({
+                    const arg = node.arguments[0];
+                    const pathValue = arg && arg.type === 'Literal' ? String(arg.value).toLowerCase() : '';
+                    const isCredential = ['.aws', '.ssh', '.npmrc', 'aws_access_key', 'shadow'].some(s => pathValue.includes(s));
+
+                    if (isCredential) {
+                        facts.CREDENTIAL_FILE_ACCESS.push({
+                            file: filePath,
+                            line: node.loc.start.line,
+                            path: pathValue
+                        });
+                    } else {
+                        facts.FILE_READ_SENSITIVE.push({
+                            file: filePath,
+                            line: node.loc.start.line,
+                            path: sourceCode.substring(node.arguments[0].start, node.arguments[0].end)
+                        });
+                    }
+                }
+
+                if (this.isDiscordStorageAccess(calleeCode, node, sourceCode)) {
+                    facts.DISCORD_STORAGE_ACCESS.push({
                         file: filePath,
                         line: node.loc.start.line,
-                        path: node.arguments[0] ? sourceCode.substring(node.arguments[0].start, node.arguments[0].end) : 'unknown'
+                        path: sourceCode.substring(node.arguments[0].start, node.arguments[0].end)
                     });
                 }
 
@@ -218,6 +343,54 @@ class ASTCollector {
                         file: filePath,
                         line: node.loc.start.line,
                         path: node.arguments[0] ? sourceCode.substring(node.arguments[0].start, node.arguments[0].end) : 'unknown'
+                    });
+                }
+
+                if (this.isWiperOperation(calleeCode, node, sourceCode)) {
+                    facts.WIPER_OPERATION.push({
+                        file: filePath,
+                        line: node.loc.start.line,
+                        path: node.arguments[0] ? sourceCode.substring(node.arguments[0].start, node.arguments[0].end) : 'unknown'
+                    });
+                }
+
+                if (this.isRegistryTamper(calleeCode, node, sourceCode)) {
+                    facts.REGISTRY_TAMPER.push({
+                        file: filePath,
+                        line: node.loc.start.line,
+                        path: node.arguments[0] ? sourceCode.substring(node.arguments[0].start, node.arguments[0].end) : 'unknown'
+                    });
+                }
+
+                if (this.isModuleTamper(calleeCode, node, sourceCode)) {
+                    facts.MODULE_TAMPER.push({
+                        file: filePath,
+                        line: node.loc.start.line,
+                        path: node.arguments[0] ? sourceCode.substring(node.arguments[0].start, node.arguments[0].end) : 'unknown'
+                    });
+                }
+
+                if (this.isReverseShellBehavior(calleeCode, node, sourceCode)) {
+                    facts.REVERSE_SHELL_BEHAVIOR.push({
+                        file: filePath,
+                        line: node.loc.start.line,
+                        context: calleeCode
+                    });
+                }
+
+                if (this.isPublishSink(calleeCode, node, sourceCode)) {
+                    facts.PUBLISH_SINK.push({
+                        file: filePath,
+                        line: node.loc.start.line,
+                        callee: calleeCode
+                    });
+                }
+
+                if (this.isOSFingerprint(calleeCode, node, sourceCode)) {
+                    facts.FINGERPRINT_SIGNAL.push({
+                        file: filePath,
+                        line: node.loc.start.line,
+                        context: calleeCode
                     });
                 }
 
@@ -268,25 +441,6 @@ class ASTCollector {
                                 transformation: calleeCode.includes('base64') ? 'base64' : (calleeCode.includes('hex') ? 'hex' : 'buffer')
                             });
                         }
-                    }
-                }
-            },
-            MemberExpression: (node) => {
-                const objectCode = sourceCode.substring(node.object.start, node.object.end);
-                if (objectCode === 'process.env' || objectCode === 'process["env"]' || objectCode === "process['env']") {
-                    const property = node.property.name || (node.property.type === 'Literal' ? node.property.value : null);
-                    const whitelist = ['NODE_ENV', 'TIMING', 'DEBUG', 'VERBOSE', 'CI', 'APPDATA', 'HOME', 'USERPROFILE', 'PATH', 'PWD'];
-                    if (whitelist.includes(property)) return;
-
-                    envAccessCount++;
-                    facts.ENV_READ.push({
-                        file: filePath,
-                        line: node.loc.start.line,
-                        variable: property ? `process.env.${property}` : 'process.env'
-                    });
-
-                    if (envAccessCount > 5) {
-                        facts.MASS_ENV_ACCESS.push({ file: filePath, line: node.loc.start.line, count: envAccessCount });
                     }
                 }
             },
@@ -403,8 +557,16 @@ class ASTCollector {
 
         if (node.arguments.length > 0 && node.arguments[0].type === 'Literal') {
             const pathValue = String(node.arguments[0].value);
-            const sensitive = ['.ssh', '.env', 'shadow', 'passwd', 'credentials', 'token', '_netrc', 'aws_access_key'];
-            return sensitive.some((s) => pathValue.toLowerCase().includes(s));
+            const sensitive = ['.ssh', '.env', 'shadow', 'passwd', 'credentials', 'token', '_netrc', 'aws_access_key', '.npmrc'];
+            if (sensitive.some((s) => pathValue.includes(s))) return true;
+
+            // Deep check: if argument is a variable, check if it was initialized with a sensitive string
+            const arg = node.arguments[0];
+            if (arg && arg.type === 'Identifier') {
+                const varName = arg.name;
+                // This is a bit complex for a one-liner, but we can check if it's in our local flows
+                // For now, let's just stick to the code string includes, which already handles BinaryExpressions of literals
+            }
         }
         return false;
     }
@@ -418,6 +580,21 @@ class ASTCollector {
             const pathValue = String(node.arguments[0].value);
             const startup = ['package.json', '.npmrc', '.bashrc', '.zshrc', 'crontab', 'init.d', 'systemd'];
             return startup.some((s) => pathValue.toLowerCase().includes(s));
+        }
+        return false;
+    }
+
+    isDiscordStorageAccess(calleeCode, node, sourceCode) {
+        if (typeof calleeCode !== 'string') return false;
+        if (!calleeCode.includes('fs.readFile') && !calleeCode.includes('fs.readFileSync')) return false;
+
+        if (node.arguments.length > 0) {
+            const arg = node.arguments[0];
+            const argCode = sourceCode.substring(arg.start, arg.end).toLowerCase();
+
+            // Detection: check if the argument code OR any part of the expression contains 'discord' and 'local storage'
+            // We also check identifiers if their names are suspicious (simple heuristic)
+            return argCode.includes('discord') && (argCode.includes('local storage') || argCode.includes('leveldb') || argCode.includes('token'));
         }
         return false;
     }
@@ -457,6 +634,105 @@ class ASTCollector {
                 }
             });
         }
+    }
+
+    isWiperOperation(calleeCode, node, sourceCode) {
+        if (typeof calleeCode !== 'string') return false;
+        const wiperFuncs = ['fs.rm', 'fs.rmSync', 'fs.rmdir', 'fs.rmdirSync', 'fs.unlink', 'fs.unlinkSync'];
+        const isWiperFunc = wiperFuncs.some(f => calleeCode === f || calleeCode.endsWith('.' + f));
+        if (!isWiperFunc) return false;
+
+        const arg = node.arguments[0];
+        if (!arg) return false;
+
+        const argCode = sourceCode.substring(arg.start, arg.end).toLowerCase();
+        const sensitivePaths = ['/root', '/home', '/etc', '/var/log', '/usr/bin', '/bin', 'c:\\windows', 'c:\\users'];
+        const isSensitivePath = sensitivePaths.some(p => argCode.includes(p));
+
+        const hasRecursive = sourceCode.substring(node.start, node.end).includes('recursive: true');
+        return isSensitivePath || hasRecursive;
+    }
+
+    isRegistryTamper(calleeCode, node, sourceCode) {
+        if (typeof calleeCode !== 'string') return false;
+        if (!calleeCode.includes('fs.writeFile') && !calleeCode.includes('fs.writeFileSync') && !calleeCode.includes('fs.appendFile')) return false;
+
+        if (node.arguments.length > 0) {
+            const arg = node.arguments[0];
+            const argCode = sourceCode.substring(arg.start, arg.end).toLowerCase();
+            return argCode.includes('.npmrc') || argCode.includes('registry') || argCode.includes('npm-registry');
+        }
+        return false;
+    }
+
+    isModuleTamper(calleeCode, node, sourceCode) {
+        if (typeof calleeCode !== 'string') return false;
+        if (!calleeCode.includes('fs.writeFile') && !calleeCode.includes('fs.writeFileSync') && !calleeCode.includes('fs.mkdir')) return false;
+
+        if (node.arguments.length > 0) {
+            const arg = node.arguments[0];
+            const argCode = sourceCode.substring(arg.start, arg.end).toLowerCase();
+            return argCode.includes('node_modules') || argCode.includes('.git');
+        }
+        return false;
+    }
+
+    isReverseShellBehavior(calleeCode, node, sourceCode) {
+        if (typeof calleeCode !== 'string') return false;
+        if (calleeCode.endsWith('.pipe')) {
+            const arg = node.arguments[0];
+            if (arg) {
+                const argCode = sourceCode.substring(arg.start, arg.end);
+                return ['process.stdin', 'process.stdout', 'sh', 'bash', 'cmd', 'pwsh'].some(s => argCode.includes(s));
+            }
+        }
+        return false;
+    }
+
+    isPublishSink(calleeCode, node, sourceCode) {
+        if (typeof calleeCode !== 'string') return false;
+
+        // 1. Direct Shell Commands
+        if (this.isShellSink(calleeCode)) {
+            const arg = node.arguments[0];
+            if (arg && arg.type === 'Literal' && typeof arg.value === 'string') {
+                const val = arg.value.toLowerCase();
+                if (val.includes('npm publish') || val.includes('npm login') || val.includes('npm adduser')) return true;
+                if (val.includes('pnpm publish') || val.includes('yarn publish')) return true;
+            }
+        }
+
+        // 2. Registry API calls (e.g. put to /-/package/)
+        const networkSinks = ['fetch', 'axios', 'request', 'http.request', 'https.request'];
+        const isNet = networkSinks.some(s => calleeCode === s || calleeCode.endsWith('.' + s));
+        if (isNet && node.arguments.length > 0) {
+            const arg = node.arguments[0];
+            if (arg && arg.type === 'Literal' && typeof arg.value === 'string') {
+                const val = arg.value.toLowerCase();
+                if (val.includes('registry.npmjs.org') && (val.includes('/-/user/') || val.includes('/-/package/'))) return true;
+            }
+        }
+
+        return false;
+    }
+
+    isOSFingerprint(calleeCode, node, sourceCode) {
+        if (typeof calleeCode !== 'string') return false;
+
+        // 1. OS Module Methods
+        const osMethods = ['os.platform', 'os.arch', 'os.release', 'os.type', 'os.cpus', 'os.networkInterfaces', 'os.userInfo'];
+        if (osMethods.some(m => calleeCode === m || calleeCode.endsWith('.' + m))) return true;
+
+        // 2. File Reads of OS metadata
+        if (calleeCode.includes('fs.readFile') || calleeCode.includes('fs.readFileSync')) {
+            const arg = node.arguments[0];
+            if (arg && arg.type === 'Literal' && typeof arg.value === 'string') {
+                const val = arg.value.toLowerCase();
+                if (val.includes('/etc/os-release') || val.includes('/etc/issue') || val.includes('/proc/version')) return true;
+            }
+        }
+
+        return false;
     }
 }
 

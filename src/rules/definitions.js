@@ -137,13 +137,143 @@ const RULES = [
         priority: 1,
         baseScore: 25,
         description: 'Detection of very large high-entropy strings that exceed scanning limits.'
+    },
+    {
+        id: 'ZFT-016',
+        alias: 'CREDENTIAL_STEAL_ATTEMPT',
+        name: 'Credential Theft Attempt',
+        requires: ['CREDENTIAL_FILE_ACCESS', 'NETWORK_SINK'],
+        priority: 1,
+        baseScore: 85,
+        description: 'Detection of access to sensitive credential files (.aws, .ssh, .npmrc) and exfiltration.'
+    },
+    {
+        id: 'ZFT-017',
+        alias: 'ANTI_ANALYSIS_EVASION',
+        name: 'Anti-Analysis / Evasion',
+        requires: ['EVASION_ENVIRONMENT_CHECK'],
+        optional: ['DYNAMIC_EXECUTION'],
+        priority: 2,
+        baseScore: 50,
+        description: 'Detection of code that checks for VM, Debugger, or Sandbox environments to evade analysis.'
+    },
+    {
+        id: 'ZFT-018',
+        alias: 'CRYPTO_WALLET_DRAINER',
+        name: 'Crypto-Wallet Drainer Hook',
+        requires: ['WALLET_HOOK'],
+        priority: 1,
+        baseScore: 95,
+        description: 'Detection of hooks on browser-based crypto wallets (window.ethereum, Solana).'
+    },
+    {
+        id: 'ZFT-019',
+        alias: 'DISCORD_TOKEN_STEALER',
+        name: 'Discord Token Stealer',
+        requires: ['DISCORD_STORAGE_ACCESS', 'NETWORK_SINK'],
+        priority: 1,
+        baseScore: 80,
+        description: 'Detection of Discord local storage access followed by network activity.'
+    },
+    {
+        id: 'ZFT-020',
+        alias: 'HIGH_RISK_WEBHOOK_SINK',
+        name: 'High-Risk Webhook Exfiltration',
+        requires: ['WEBHOOK_SINK'],
+        optional: ['ENV_READ', 'ENCODER_USE'],
+        priority: 2,
+        baseScore: 60,
+        description: 'Detection of data being sent to known high-risk exfiltration domains (Discord Webhooks, Pipedream).'
+    },
+    {
+        id: 'ZFT-021',
+        alias: 'WIPER_MODULE_DETECTED',
+        name: 'Destructive Wiper Module',
+        requires: ['WIPER_OPERATION'],
+        priority: 1,
+        baseScore: 100,
+        description: 'Detection of recursive deletion operations on sensitive directory structures (Home, Root, Documents).'
+    },
+    {
+        id: 'ZFT-022',
+        alias: 'CICD_SECRET_EXFILTRATION',
+        name: 'CI/CD Secret Exfiltration',
+        requires: ['CICD_SECRET_ACCESS', 'NETWORK_SINK'],
+        priority: 1,
+        baseScore: 90,
+        description: 'Detection of CI/CD secrets (GITHUB_TOKEN, CIRCLECI_TOKEN) being accessed and exfiltrated.'
+    },
+    {
+        id: 'ZFT-023',
+        alias: 'REGISTRY_POISONING_ATTEMPT',
+        name: 'Registry Poisoning Attempt',
+        requires: ['REGISTRY_TAMPER'],
+        priority: 2,
+        baseScore: 70,
+        description: 'Detection of unauthorized modifications to .npmrc or registry configuration.'
+    },
+    {
+        id: 'ZFT-024',
+        alias: 'MODULE_REPOS_HIJACKING',
+        name: 'Module/Repository Hijacking',
+        requires: ['MODULE_TAMPER'],
+        priority: 2,
+        baseScore: 75,
+        description: 'Detection of unauthorized write operations into node_modules or .git directories.'
+    },
+    {
+        id: 'ZFT-025',
+        alias: 'REVERSE_SHELL_PATTERN',
+        name: 'Reverse Shell Behavior',
+        requires: ['REVERSE_SHELL_BEHAVIOR'],
+        priority: 1,
+        baseScore: 95,
+        description: 'Detection of network sockets being piped directly into system shells (Reverse Shell pattern).'
+    },
+    {
+        id: 'ZFT-026',
+        alias: 'REGISTRY_PUBLISH_ATTEMPT',
+        name: 'Registry Publication Attempt',
+        requires: ['PUBLISH_SINK'],
+        priority: 1,
+        baseScore: 85,
+        description: 'Detection of attempts to run npm publish or interact with registry upload APIs (Worm behavior).'
+    },
+    {
+        id: 'ZFT-027',
+        alias: 'FINGERPRINT_OS_TARGETING',
+        name: 'OS Fingerprinting & Targeting',
+        requires: ['FINGERPRINT_SIGNAL'],
+        optional: ['NETWORK_SINK', 'SHELL_EXECUTION'],
+        priority: 2,
+        baseScore: 55,
+        description: 'Detection of OS metadata collection (platform, release, arch) potentially for targeted payload delivery.'
+    },
+    {
+        id: 'ZFT-028',
+        alias: 'WORM_PROPAGATION_CHAIN',
+        name: 'Automated Worm Propagation',
+        requires: ['CREDENTIAL_FILE_ACCESS', 'NETWORK_SINK', 'PUBLISH_SINK'],
+        priority: 1,
+        baseScore: 100,
+        description: 'Detection of the full worm cycle: Harvest tokens -> Exfiltrate -> Self-publish.'
+    },
+    {
+        id: 'ZFT-029',
+        alias: 'LIFECYCLE_BINARY_FETCH',
+        name: 'Lifecycle Binary Drop',
+        requires: ['REMOTE_FETCH_SIGNAL', 'LIFECYCLE_CONTEXT'],
+        optional: ['SHELL_EXECUTION'],
+        priority: 1,
+        baseScore: 90,
+        description: 'Detection of remote payload fetching specifically during package install/lifecycle scripts.'
     }
 ];
 
 const CATEGORIES = {
-    SOURCES: ['ENV_READ', 'FILE_READ_SENSITIVE', 'MASS_ENV_ACCESS'],
-    SINKS: ['NETWORK_SINK', 'DNS_SINK', 'RAW_SOCKET_SINK', 'DYNAMIC_EXECUTION', 'SHELL_EXECUTION', 'DYNAMIC_REQUIRE'],
-    SIGNALS: ['OBFUSCATION', 'ENCODER_USE', 'REMOTE_FETCH_SIGNAL', 'PIPE_TO_SHELL_SIGNAL', 'NATIVE_BINARY_DETECTED', 'OPAQUE_STRING_SKIP', 'NON_DETERMINISTIC_SINK'],
+    SOURCES: ['ENV_READ', 'FILE_READ_SENSITIVE', 'MASS_ENV_ACCESS', 'CREDENTIAL_FILE_ACCESS', 'DISCORD_STORAGE_ACCESS', 'CICD_SECRET_ACCESS'],
+    SINKS: ['NETWORK_SINK', 'DNS_SINK', 'RAW_SOCKET_SINK', 'DYNAMIC_EXECUTION', 'SHELL_EXECUTION', 'DYNAMIC_REQUIRE', 'WEBHOOK_SINK', 'WIPER_OPERATION', 'REGISTRY_TAMPER', 'MODULE_TAMPER', 'REVERSE_SHELL_BEHAVIOR', 'PUBLISH_SINK'],
+    SIGNALS: ['OBFUSCATION', 'ENCODER_USE', 'REMOTE_FETCH_SIGNAL', 'PIPE_TO_SHELL_SIGNAL', 'NATIVE_BINARY_DETECTED', 'OPAQUE_STRING_SKIP', 'NON_DETERMINISTIC_SINK', 'EVASION_ENVIRONMENT_CHECK', 'WALLET_HOOK', 'FINGERPRINT_SIGNAL'],
     PERSISTENCE: ['FILE_WRITE_STARTUP'],
     CONTEXT: ['LIFECYCLE_CONTEXT']
 };

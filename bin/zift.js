@@ -28,6 +28,13 @@ async function main() {
     return;
   }
 
+  if (args[0] === 'scan') {
+    target = args[1] || '.';
+  } else if (args[0] && !args[0].startsWith('-')) {
+    // If first arg isn't a command or flag, it might be a target
+    target = args[0];
+  }
+
   // 2. Detection for bun/pnpm usage
   if (args.includes('--bun')) installer = 'bun';
   if (args.includes('--pnpm')) installer = 'pnpm';
@@ -58,7 +65,7 @@ async function main() {
   }
 
   // 6. Execution
-  const isLocal = fs.existsSync(target) && fs.lstatSync(target).isDirectory();
+  const isLocal = fs.existsSync(target); // Check existence, dir/file handled by scanner
 
   if (isLocal) {
     await runLocalScan(target, format);

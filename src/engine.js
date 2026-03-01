@@ -32,9 +32,19 @@ class SafetyEngine {
         for (const req of rule.requires) {
             let matchedFacts = facts[req] || [];
 
-            // Specialist Rule: Startup Mod (ZFT-012) requires specific file paths (now explicit in definitions but engine may still help)
-            // But per review, we should aim for explicit facts.
-            // ZFT-012 now just requires FILE_WRITE_STARTUP. Simple.
+            // Handle virtual requirements (LIFECYCLE_CONTEXT)
+            if (req === 'LIFECYCLE_CONTEXT' && matchedFacts.length === 0) {
+                // If any trigger so far is in a lifecycle file, we satisfy the virtual requirement
+                const virtualMatch = triggers.some(t => {
+                    if (lifecycleFiles instanceof Set) return lifecycleFiles.has(t.file);
+                    if (Array.isArray(lifecycleFiles)) return lifecycleFiles.includes(t.file);
+                    return false;
+                });
+
+                if (virtualMatch) {
+                    matchedFacts = [{ type: 'LIFECYCLE_CONTEXT', virtual: true }];
+                }
+            }
 
             if (matchedFacts.length === 0) return null; // Rule not matched
             triggers.push(...matchedFacts.map(f => ({ ...f, type: req })));
@@ -65,7 +75,7 @@ class SafetyEngine {
 
         // Cluster Bonus: Source + Sink
         const hasSource = triggers.some(t => t.type.includes('READ') || t.type.includes('ACCESS'));
-        const hasSink = triggers.some(t => t.type.includes('SINK') || t.type === 'DYNAMIC_EXECUTION' || t.type === 'SHELL_EXECUTION' || t.type === 'DYNAMIC_REQUIRE');
+        const hasSink = triggers.some(t => t.type.includes('SINK') || t.type === 'DYNAMIC_EXECUTION' || t.type === 'SHELL_EXECUTION' || t.type === 'DYNAMIC_REQUIRE' || t.type === 'WIPER_OPERATION' || t.type === 'REVERSE_SHELL_BEHAVIOR');
         if (hasSource && hasSink) {
             baseScore += 40;
         }
@@ -73,8 +83,8 @@ class SafetyEngine {
         let finalScore = baseScore * multiplier;
 
         // Severe Cluster: SENSITIVE_READ + Dangerous Sink + lifecycleContext = Critical (100)
-        const isSensitiveRead = triggers.some(t => t.type === 'ENV_READ' || t.type === 'FILE_READ_SENSITIVE');
-        const isDangerousSink = triggers.some(t => t.type === 'NETWORK_SINK' || t.type === 'DNS_SINK' || t.type === 'RAW_SOCKET_SINK' || t.type === 'SHELL_EXECUTION');
+        const isSensitiveRead = triggers.some(t => t.type === 'ENV_READ' || t.type === 'FILE_READ_SENSITIVE' || t.type === 'CICD_SECRET_ACCESS');
+        const isDangerousSink = triggers.some(t => t.type === 'NETWORK_SINK' || t.type === 'DNS_SINK' || t.type === 'RAW_SOCKET_SINK' || t.type === 'SHELL_EXECUTION' || t.type === 'WEBHOOK_SINK' || t.type === 'WIPER_OPERATION' || t.type === 'REVERSE_SHELL_BEHAVIOR');
         if (isSensitiveRead && isDangerousSink && isInLifecycle) {
             finalScore = 100;
         }

@@ -45,7 +45,19 @@ class PackageScanner {
                 EXPORTS: [],
                 IMPORTS: [],
                 NATIVE_BINARY_DETECTED: [],
-                OPAQUE_STRING_SKIP: []
+                OPAQUE_STRING_SKIP: [],
+                CREDENTIAL_FILE_ACCESS: [],
+                DISCORD_STORAGE_ACCESS: [],
+                WEBHOOK_SINK: [],
+                EVASION_ENVIRONMENT_CHECK: [],
+                WALLET_HOOK: [],
+                CICD_SECRET_ACCESS: [],
+                WIPER_OPERATION: [],
+                REGISTRY_TAMPER: [],
+                MODULE_TAMPER: [],
+                REVERSE_SHELL_BEHAVIOR: [],
+                FINGERPRINT_SIGNAL: [],
+                PUBLISH_SINK: []
             },
             flows: []
         };
@@ -193,23 +205,26 @@ class PackageScanner {
             ignoreLines = [...ignoreLines, ...content.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'))];
         }
 
-        const getJsFiles = (dir) => {
+        const getJsFiles = (dirOrFile) => {
+            const stats = fs.statSync(dirOrFile);
+            if (!stats.isDirectory()) {
+                if (dirOrFile.endsWith('.js') || dirOrFile.endsWith('.node')) {
+                    return [dirOrFile];
+                }
+                return [];
+            }
+
             const results = [];
-            const list = fs.readdirSync(dir);
+            const list = fs.readdirSync(dirOrFile);
             for (const file of list) {
-                const fullPath = path.join(dir, file);
+                const fullPath = path.join(dirOrFile, file);
                 const relativePath = path.relative(this.packageDir, fullPath);
 
                 // Simple ignore check
                 if (ignoreLines.some(pattern => relativePath.includes(pattern) || file === pattern)) continue;
                 if (file.startsWith('.') && file !== '.ziftignore') continue;
 
-                const stat = fs.statSync(fullPath);
-                if (stat && stat.isDirectory()) {
-                    results.push(...getJsFiles(fullPath));
-                } else if (file.endsWith('.js') || file.endsWith('.node')) {
-                    results.push(fullPath);
-                }
+                results.push(...getJsFiles(fullPath));
             }
             return results;
         };
@@ -233,7 +248,7 @@ class PackageScanner {
                         type: t.type,
                         file: path.relative(this.packageDir, t.file),
                         line: t.line,
-                        context: t.reason || t.callee || t.variable || t.path
+                        context: t.reason || t.callee || t.variable || t.path || t.url || t.context
                     }))
                 };
             }),
