@@ -427,6 +427,45 @@ class ASTCollector {
                     }
                 });
 
+                // v5.2 Symbolic Async: await and .then()
+                if (calleeCode.includes('.then')) {
+                    const parts = calleeCode.split('.then');
+                    const promiseBase = parts[0];
+                    const isPromiseTainted = flows.some(f => f.toVar === promiseBase) || promiseBase.includes('process.env') || promiseBase.includes('secret');
+
+                    if (isPromiseTainted && node.arguments[0] && (node.arguments[0].type === 'ArrowFunctionExpression' || node.arguments[0].type === 'FunctionExpression')) {
+                        const param = node.arguments[0].params[0];
+                        if (param && param.type === 'Identifier') {
+                            flows.push({
+                                fromVar: promiseBase,
+                                toVar: param.name,
+                                file: filePath,
+                                line: node.loc.start.line,
+                                async: true
+                            });
+                        }
+                    }
+                }
+
+                // v5.1 Symbolic Mutations: .push(), .concat(), .assign()
+                const mutationMethods = ['push', 'unshift', 'concat', 'assign', 'append'];
+                if (mutationMethods.some(m => calleeCode.endsWith('.' + m))) {
+                    const objectName = calleeCode.split('.')[0];
+                    node.arguments.forEach(arg => {
+                        const argCode = sourceCode.substring(arg.start, arg.end);
+                        const isArgTainted = argCode.includes('process.env') || flows.some(f => f.toVar === argCode);
+                        if (isArgTainted) {
+                            flows.push({
+                                fromVar: argCode,
+                                toVar: objectName,
+                                file: filePath,
+                                line: node.loc.start.line,
+                                mutation: calleeCode
+                            });
+                        }
+                    });
+                }
+
                 // v5.0 Symbolic Transformers: Buffer/Base64/Hex
                 if (calleeCode.includes('Buffer.from') || calleeCode.includes('.toString')) {
                     const parent = ancestors[ancestors.length - 2];
@@ -452,6 +491,20 @@ class ASTCollector {
             },
             AssignmentExpression: (node) => {
                 const leftCode = sourceCode.substring(node.left.start, node.left.end);
+                if (node.right.type === 'AwaitExpression') {
+                    const from = sourceCode.substring(node.right.argument.start, node.right.argument.end);
+                    const isFromTainted = flows.some(f => f.toVar === from) || from.includes('process.env');
+                    if (isFromTainted) {
+                        flows.push({
+                            fromVar: from,
+                            toVar: leftCode,
+                            file: filePath,
+                            line: node.loc.start.line,
+                            async: true
+                        });
+                    }
+                }
+
                 if (leftCode === 'module.exports' || leftCode.startsWith('exports.')) {
                     facts.EXPORTS.push({
                         file: filePath,

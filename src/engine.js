@@ -30,24 +30,38 @@ class SafetyEngine {
 
         // Check required facts
         for (const req of rule.requires) {
-            let matchedFacts = facts[req] || [];
+            let matchedFacts = (facts[req] || []).map(f => ({ ...f, type: req }));
 
             // Handle virtual requirements (LIFECYCLE_CONTEXT)
             if (req === 'LIFECYCLE_CONTEXT' && matchedFacts.length === 0) {
-                // If any trigger so far is in a lifecycle file, we satisfy the virtual requirement
                 const virtualMatch = triggers.some(t => {
                     if (lifecycleFiles instanceof Set) return lifecycleFiles.has(t.file);
                     if (Array.isArray(lifecycleFiles)) return lifecycleFiles.includes(t.file);
                     return false;
                 });
-
                 if (virtualMatch) {
                     matchedFacts = [{ type: 'LIFECYCLE_CONTEXT', virtual: true }];
                 }
             }
 
-            if (matchedFacts.length === 0) return null; // Rule not matched
-            triggers.push(...matchedFacts.map(f => ({ ...f, type: req })));
+            if (matchedFacts.length === 0) return null;
+
+            // v5.3 Sequence Matching: Ensure facts occur in specified order (if rule has .sequence)
+            if (rule.sequence) {
+                const reqIndex = rule.requires.indexOf(req);
+                if (reqIndex > 0) {
+                    const prevReq = rule.requires[reqIndex - 1];
+                    const prevTriggers = triggers.filter(t => t.type === prevReq);
+
+                    // Filter current matches to only those that happen AFTER a previous trigger
+                    matchedFacts = matchedFacts.filter(curr => {
+                        return prevTriggers.some(prev => curr.line >= prev.line);
+                    });
+                }
+            }
+
+            if (matchedFacts.length === 0) return null;
+            triggers.push(...matchedFacts);
         }
 
         // Check optional facts for bonuses

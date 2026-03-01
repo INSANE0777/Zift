@@ -14,8 +14,10 @@ function setupShield() {
         console.warn(`[ZIFT-SHIELD] 🌐 Outbound Connection: ${address}:${port}`);
     });
 
-    // 2. Wrap Child Process (for shell command execution) - IMMUTABLE
+    // 2. Wrap Child Process (for shell command execution) - ACTIVE BLOCKING
     const cp = require('node:child_process');
+    const ALLOWED_COMMANDS = ['npm install', 'npm audit', 'ls', 'dir', 'whoami', 'node -v'];
+
     ['exec', 'spawn', 'execSync', 'spawnSync'].forEach(method => {
         const original = cp[method];
         if (!original) return;
@@ -23,10 +25,18 @@ function setupShield() {
         const wrapper = function (...args) {
             const command = args[0];
             const cmdStr = typeof command === 'string' ? command : (Array.isArray(args[1]) ? args[1].join(' ') : String(command));
-            console.warn(`[ZIFT-SHIELD] 🐚 Shell Execution: ${cmdStr}`);
 
-            if (cmdStr.includes('curl') || cmdStr.includes('wget') || cmdStr.includes('| sh') || cmdStr.includes('| bash')) {
-                console.error(`[ZIFT-SHIELD] ⚠️  CRITICAL: Potential Remote Dropper detected in shell execution!`);
+            // Security Logic
+            const isCritical = cmdStr.includes('curl') || cmdStr.includes('wget') || cmdStr.includes('| sh') || cmdStr.includes('| bash') || cmdStr.includes('rm -rf /');
+            const isBlocked = !ALLOWED_COMMANDS.some(allowed => cmdStr.startsWith(allowed)) || isCritical;
+
+            if (isBlocked) {
+                console.error(`[ZIFT-SHIELD] ❌ BLOCKED: Unauthorized or dangerous shell execution: "${cmdStr}"`);
+                if (process.env.ZIFT_ENFORCE === 'true') {
+                    throw new Error(`[ZIFT-SHIELD] Access Denied: Shell command "${cmdStr}" is not in the allow-list.`);
+                }
+            } else {
+                console.warn(`[ZIFT-SHIELD] 🐚 Shell Execution (Allowed): ${cmdStr}`);
             }
 
             return original.apply(this, args);
@@ -36,6 +46,42 @@ function setupShield() {
             Object.defineProperty(cp, method, { value: wrapper, writable: false, configurable: false });
         } catch (e) {
             cp[method] = wrapper; // Fallback
+        }
+    });
+
+    // 2.5 Filesystem Protection
+    const fs = require('node:fs');
+    const PROTECTED_FILES = ['.env', '.npmrc', 'shadow', 'id_rsa', 'id_ed25519'];
+
+    const fsMethods = ['readFile', 'readFileSync', 'promises.readFile', 'createReadStream'];
+    fsMethods.forEach(methodPath => {
+        let parent = fs;
+        let method = methodPath;
+        if (methodPath.startsWith('promises.')) {
+            parent = fs.promises;
+            method = 'readFile';
+        }
+
+        const original = parent[method];
+        if (!original) return;
+
+        const wrapper = function (...args) {
+            const pathArg = args[0];
+            const pathStr = typeof pathArg === 'string' ? pathArg : (pathArg instanceof Buffer ? pathArg.toString() : String(pathArg));
+
+            if (PROTECTED_FILES.some(f => pathStr.includes(f))) {
+                console.error(`[ZIFT-SHIELD] ❌ BLOCKED: Access to protected file: "${pathStr}"`);
+                if (process.env.ZIFT_ENFORCE === 'true') {
+                    throw new Error(`[ZIFT-SHIELD] Access Denied: Protected file "${pathStr}" cannot be read.`);
+                }
+            }
+            return original.apply(this, args);
+        };
+
+        try {
+            Object.defineProperty(parent, method, { value: wrapper, writable: false, configurable: false });
+        } catch (e) {
+            parent[method] = wrapper;
         }
     });
 
