@@ -43,7 +43,9 @@ class PackageScanner {
                 PIPE_TO_SHELL_SIGNAL: [],
                 LIFECYCLE_CONTEXT: [],
                 EXPORTS: [],
-                IMPORTS: []
+                IMPORTS: [],
+                NATIVE_BINARY_DETECTED: [],
+                OPAQUE_STRING_SKIP: []
             },
             flows: []
         };
@@ -55,6 +57,13 @@ class PackageScanner {
         for (let i = 0; i < files.length; i += concurrency) {
             const chunk = files.slice(i, i + concurrency);
             await Promise.all(chunk.map(async (file) => {
+                if (file.endsWith('.node')) {
+                    allFacts.facts.NATIVE_BINARY_DETECTED.push({
+                        file,
+                        reason: 'Compiled native binary detected (Opaque Payload)'
+                    });
+                    return;
+                }
                 const stats = fs.statSync(file);
                 if (stats.size > 512 * 1024) return;
 
@@ -166,7 +175,7 @@ class PackageScanner {
                 const stat = fs.statSync(fullPath);
                 if (stat && stat.isDirectory()) {
                     results.push(...getJsFiles(fullPath));
-                } else if (file.endsWith('.js')) {
+                } else if (file.endsWith('.js') || file.endsWith('.node')) {
                     results.push(fullPath);
                 }
             }

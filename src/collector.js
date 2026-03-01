@@ -27,7 +27,9 @@ class ASTCollector {
             REMOTE_FETCH_SIGNAL: [],
             PIPE_TO_SHELL_SIGNAL: [],
             EXPORTS: [],
-            IMPORTS: []
+            IMPORTS: [],
+            OPAQUE_STRING_SKIP: [],
+            NON_DETERMINISTIC_SINK: []
         };
         const flows = [];
         const sourceCode = code;
@@ -46,7 +48,20 @@ class ASTCollector {
 
         walk.ancestor(ast, {
             Literal: (node) => {
-                if (typeof node.value === 'string' && node.value.length > 20 && node.value.length < this.maxStringLengthForEntropy) {
+                if (typeof node.value === 'string' && node.value.length > 20) {
+                    if (node.value.length > this.maxStringLengthForEntropy) {
+                        // High Entropy Skip Warning
+                        const sample = node.value.substring(0, 100);
+                        const sampleEntropy = calculateEntropy(sample);
+                        if (sampleEntropy > this.entropyThreshold) {
+                            facts.OPAQUE_STRING_SKIP.push({
+                                file: filePath,
+                                line: node.loc.start.line,
+                                reason: `Large string skipped (>2KB) but sample has high entropy (${sampleEntropy.toFixed(2)})`
+                            });
+                        }
+                        return;
+                    }
                     const entropy = calculateEntropy(node.value);
                     if (entropy > this.entropyThreshold) {
                         facts.OBFUSCATION.push({
@@ -223,6 +238,18 @@ class ASTCollector {
                                 toVar: `${calleeCode}:${paramName}`,
                                 file: filePath,
                                 line: node.loc.start.line
+                            });
+                        }
+                    }
+
+                    // v4.0 Hardening: Non-deterministic constructor
+                    if (['Math.random', 'Date.now', 'Date()'].some(t => argCode.includes(t))) {
+                        if (evaluated === 'eval' || evaluated === 'Function' || this.isShellSink(calleeCode)) {
+                            facts.NON_DETERMINISTIC_SINK.push({
+                                file: filePath,
+                                line: node.loc.start.line,
+                                callee: calleeCode,
+                                reason: `Sink uses non-deterministic argument (${argCode})`
                             });
                         }
                     }

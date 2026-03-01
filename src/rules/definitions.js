@@ -110,13 +110,40 @@ const RULES = [
         priority: 2,
         baseScore: 60,
         description: 'Detection of attempts to modify package.json scripts or npm configuration.'
+    },
+    {
+        id: 'ZFT-013',
+        alias: 'OPAQUE_BINARY_PAYLOAD',
+        name: 'Opaque Binary Payload',
+        requires: ['NATIVE_BINARY_DETECTED'],
+        priority: 2,
+        baseScore: 40,
+        description: 'Detection of compiled native binaries (.node) which are opaque to static analysis.'
+    },
+    {
+        id: 'ZFT-014',
+        alias: 'EVASIVE_SINK_CONSTRUCTION',
+        name: 'Evasive Sink Construction',
+        requires: ['NON_DETERMINISTIC_SINK'],
+        priority: 3,
+        baseScore: 50,
+        description: 'Detection of dangerous sinks using non-deterministic construction (Date.now, Math.random) to evade analysis.'
+    },
+    {
+        id: 'ZFT-015',
+        alias: 'HIGH_ENTROPY_OPAQUE_STRING',
+        name: 'High Entropy Opaque String',
+        requires: ['OPAQUE_STRING_SKIP'],
+        priority: 1,
+        baseScore: 25,
+        description: 'Detection of very large high-entropy strings that exceed scanning limits.'
     }
 ];
 
 const CATEGORIES = {
     SOURCES: ['ENV_READ', 'FILE_READ_SENSITIVE', 'MASS_ENV_ACCESS'],
     SINKS: ['NETWORK_SINK', 'DNS_SINK', 'RAW_SOCKET_SINK', 'DYNAMIC_EXECUTION', 'SHELL_EXECUTION', 'DYNAMIC_REQUIRE'],
-    SIGNALS: ['OBFUSCATION', 'ENCODER_USE', 'REMOTE_FETCH_SIGNAL', 'PIPE_TO_SHELL_SIGNAL'],
+    SIGNALS: ['OBFUSCATION', 'ENCODER_USE', 'REMOTE_FETCH_SIGNAL', 'PIPE_TO_SHELL_SIGNAL', 'NATIVE_BINARY_DETECTED', 'OPAQUE_STRING_SKIP', 'NON_DETERMINISTIC_SINK'],
     PERSISTENCE: ['FILE_WRITE_STARTUP'],
     CONTEXT: ['LIFECYCLE_CONTEXT']
 };

@@ -1,19 +1,20 @@
-# 🛡️ Zift (v3.0.0)
+# 🛡️ Zift (v4.0.0)
 
 [![npm version](https://img.shields.io/npm/v/@7nsane/zift.svg?style=flat-square)](https://www.npmjs.com/package/@7nsane/zift)
 [![License](https://img.shields.io/npm/l/@7nsane/zift.svg?style=flat-square)](https://www.npmjs.com/package/@7nsane/zift)
 [![Build Status](https://img.shields.io/badge/CI-passing-brightgreen?style=flat-square)](https://github.com/7nsane/zift)
 
-**The Intelligent Ecosystem Security Engine for JavaScript.**
+**The Deeply Hardened Ecosystem Security Engine for JavaScript.**
 
-Zift v3.0 is a massive leap forward, moving beyond static analysis into **Cross-File Intelligence** and **Runtime Protection**. It is designed to identify and stop advanced supply-chain attacks (credential exfiltration, reverse-shell droppers) before they hit your production environment.
+Zift v4.0 is the "Deep Hardening" release, featuring **Immutable Runtime Guards** and **Opaque Payload Detection**, specifically designed to resist active attacker bypasses.
 
-## 🚀 Major Features (v3.0.0)
+## 🚀 Key Advancements (v4.0.0)
 
-- **🌍 Cross-File Taint Tracking**: Tracks sensitive data (e.g., `process.env.TOKEN`) across `import/export` and `require` boundaries.
-- **🧠 VM-Based De-obfuscation**: Safe, sandboxed evaluation of string manipulation logic (e.g., character arrays, reverse/join) to reveal hidden malicious signals.
-- **🛡️ Zift Shield (Runtime Guard)**: A real-time audit layer for network and shell activity. Run `zift protect` to monitor your app's dependencies in real-world conditions.
-- **🔒 Lockfile Security**: Automatic auditing of `package-lock.json` and `yarn.lock` for registry confusion.
+- **🛡️ Immutable Zift Shield**: Runtime sinks (`http`, `child_process`) are now immutable. Attackers cannot delete or re-assign them to bypass protection.
+- **🧩 Opaque Payload Detection**: Automatically flags compiled native binaries (`.node`) as high-risk.
+- **🧵 Universal Protection**: Zift Shield now automatically propagates into `worker_threads`.
+- **🕵️ Evasion Tracking**: Detects non-deterministic sink construction (e.g., using `Date.now()` or `Math.random()` to hide strings).
+- **🌍 Cross-File Intelligence**: Full multi-pass taint tracking for ESM and CommonJS.
 
 ## 📦 Quick Start
 
