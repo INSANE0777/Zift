@@ -3,14 +3,14 @@ title: "Securing the NPM Ecosystem: Introducing Zift — The Symbolically-Intell
 published: false
 description: "Meet Zift, a high-performance security scanner and runtime shield for JavaScript that goes beyond simple pattern matching to detect complex supply-chain attacks."
 tags: javascript, security, nodejs, opensource
-cover_image: https://raw.githubusercontent.com/7nsane/zift/main/v1.png
+cover_image: https://raw.githubusercontent.com/INSANE0777/Zift/main/v1.png
 ---
 
-# 🛡️ The Future of Supply-Chain Defense is Here
+## 🛡️ A Deterministic Defense Layer for the NPM Ecosystem
 
 In an era where a single compromised dependency can take down an enterprise, simply "checking for bad words" isn't enough. Modern malware is polymorphic, obfuscated, and deeply clever.
 
-Introducing **Zift**, a high-performance, deterministic security engine designed to be the ultimate defense layer for your JavaScript projects. We've just hit a massive milestone—**810 weekly downloads!**—and it's time to share why developers are switching to Zift.
+Introducing **Zift**, a high-performance security engine designed to be a deterministic defense layer for JavaScript supply chains. We've just hit a massive milestone—**810 weekly downloads!**—and it's time to share why developers are adopting Zift.
 
 ## What makes Zift different?
 
@@ -28,7 +28,7 @@ Literal string matching is easy to bypass. Attackers hide `eval` inside variable
 ## 🛡️ 2. The Runtime Shield (Immutable Defense)
 What if a malicious script executes at runtime? Zift's **Shield** provides a proactive defense layer.
 
-- **Immutable Sinks**: We hijack dangerous sinks like `http.request` and `child_process.exec` and make them immutable. Attackers cannot "unhook" our protection.
+- **Hardened Sinks**: Zift seals critical sink functions like `http.request` and `child_process.exec` to significantly reduce the risk of runtime tampering. While Node.js globals are notoriously flexible, Zift uses immutable descriptors to raise the bar for attackers.
 - **Worker Thread Protection**: Protection automatically propagates into newly created threads.
 - **Permission Management**: Define exactly what your dependencies are allowed to do before they ever run.
 
@@ -104,12 +104,26 @@ require('@7nsane/zift/shield');
 // Your application and all its dependencies are now monitored.
 ```
 
-## 📈 810 Downloads & Counting...
-We are building a community of security-conscious developers who believe that "good enough" isn't enough for the NPM ecosystem. Zift is open-source, deterministic, and built for speed.
+---
 
-## 📦 Join the Movement
+## ⚖️ Scope & Limitations
+
+Zift is a deterministic static and runtime hardening engine. To maintain credibility within your security stack, it is important to understand what Zift **does not** do:
+
+- **Dynamic Symbolic Execution**: Zift performs static symbolic analysis; it does not execute the code in a full VM to resolve complex runtime states.
+- **Runtime-only Decryption**: It cannot detect logic that is only decrypted and executed entirely at runtime (though it flags the decoders themselves).
+- **Code Generation**: It does not analyze code strings generated entirely on the fly via complex external inputs.
+- **Vulnerability Databases**: Zift is not a replacement for `npm audit` or Snyk; it focuses on behavioral anomalies, not known CVEs.
+
+It is designed to act as a fast, deterministic pre-install and runtime defense layer.
+
+## � 810 Downloads & Counting...
+
+Zift is open-source and growing within the JavaScript security community. Reaching **810 downloads a week** is a testament to the demand for better, more proactive security tools. We are building Zift to be the deterministic defense layer every production app deserves.
+
+## 📦 Getting Involved
 - **NPM**: [@7nsane/zift](https://www.npmjs.com/package/@7nsane/zift)
-- **GitHub**: [Zift Project](https://github.com/7nsane/zift)
+- **GitHub**: [Zift Project](https://github.com/INSANE0777/Zift)
 
 Secure your supply chain. Don't just scan—**Shield it.**
 
