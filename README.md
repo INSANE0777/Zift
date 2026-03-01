@@ -1,4 +1,4 @@
-# 🛡️ Zift (v4.1.0)
+# 🛡️ Zift (v4.2.0)
 
 [![npm version](https://img.shields.io/npm/v/@7nsane/zift.svg?style=flat-square)](https://www.npmjs.com/package/@7nsane/zift)
 [![License](https://img.shields.io/npm/l/@7nsane/zift.svg?style=flat-square)](https://www.npmjs.com/package/@7nsane/zift)
@@ -6,9 +6,9 @@
 
 **The Symbolically-Intelligent Ecosystem Security Engine for JavaScript.**
 
-Zift v4.1 is the "Intelligence" release, introducing **Symbolic Taint Analysis**. It can track sensitive data through complex code transformations, destructuring, and nested object structures across module boundaries.
+Zift v4.2 is the "Deep Hardening" release, introducing advanced behavioral rules for Wiper detection, Worm prevention, and OS-specific targeting analysis.
 
-## 🚀 Key Advancements (v4.1.0)
+## 🚀 Key Advancements (v4.2.0)
 
 - **🧠 Symbolic Taint Analysis**: Tracks data through destructuring (`const { key } = process.env`) and deep property access (`obj.a.b.c`).
 - **🧬 Transformation Tracking**: Automatically follows taint through encoding methods like `Buffer.from(data).toString('base64')` or `hex`.
