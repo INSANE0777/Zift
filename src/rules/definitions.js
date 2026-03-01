@@ -45,9 +45,59 @@ const RULES = [
         id: 'ZFT-006',
         alias: 'DYNAMIC_REQUIRE_DEPENDENCY',
         name: 'Dynamic Require Dependency',
-        requires: ['DYNAMIC_EXECUTION'], // Will check if type === 'dynamic_require' in engine
+        requires: ['DYNAMIC_EXECUTION'],
         baseScore: 30,
         description: 'Detection of dynamic require calls where the dependency name is a variable.'
+    },
+    {
+        id: 'ZFT-007',
+        alias: 'DNS_EXFILTRATION',
+        name: 'DNS-Based Exfiltration',
+        requires: ['ENV_READ', 'NETWORK_SINK'], // Engine will check for dns.resolve in callee
+        baseScore: 45,
+        description: 'Stealthy environment variable exfiltration via DNS lookups.'
+    },
+    {
+        id: 'ZFT-008',
+        alias: 'SUSPICIOUS_COLLECTION',
+        name: 'Suspicious Information Collection',
+        requires: ['ENV_READ'],
+        optional: ['FILE_READ_SENSITIVE'],
+        baseScore: 20,
+        description: 'Massive environment or file reading without immediate network activity (potential harvesting).'
+    },
+    {
+        id: 'ZFT-009',
+        alias: 'REMOTE_DROPPER_PATTERN',
+        name: 'Remote Script Dropper',
+        requires: ['SHELL_EXECUTION'],
+        optional: ['OBFUSCATION'],
+        baseScore: 55,
+        description: 'Detection of remote script download and execution (curl | sh) patterns.'
+    },
+    {
+        id: 'ZFT-010',
+        alias: 'ENCRYPTED_EXFILTRATION',
+        name: 'Encrypted Data Exfiltration',
+        requires: ['ENCODER_USE', 'NETWORK_SINK'],
+        baseScore: 50,
+        description: 'Data being encoded/encrypted before being sent over the network.'
+    },
+    {
+        id: 'ZFT-011',
+        alias: 'RAW_SOCKET_TUNNEL',
+        name: 'Raw Socket Tunneling',
+        requires: ['NETWORK_SINK'], // Engine will check for net.connect/net.createConnection
+        baseScore: 45,
+        description: 'Use of raw network sockets instead of http/dns, often used for reverse shells.'
+    },
+    {
+        id: 'ZFT-012',
+        alias: 'STARTUP_SCRIPT_MOD',
+        name: 'Startup Script Modification',
+        requires: ['FILE_WRITE_STARTUP'], // Will check for package.json or .npmrc
+        baseScore: 60,
+        description: 'Detection of attempts to modify package.json scripts or npm configuration.'
     }
 ];
 

@@ -37,6 +37,26 @@ class SafetyEngine {
             }
 
             if (matchedFacts.length === 0) return null; // Rule not matched
+
+            // Specialist Rule: DNS Exfiltration (ZFT-007) requires a DNS-specific sink
+            if (rule.alias === 'DNS_EXFILTRATION' && req === 'NETWORK_SINK') {
+                matchedFacts = matchedFacts.filter(f => f.callee && f.callee.includes('dns'));
+                if (matchedFacts.length === 0) return null;
+            }
+
+            // Specialist Rule: Raw Socket Tunnel (ZFT-011) requires net.connect or similar
+            if (rule.alias === 'RAW_SOCKET_TUNNEL' && req === 'NETWORK_SINK') {
+                matchedFacts = matchedFacts.filter(f => f.callee && (f.callee.includes('net.connect') || f.callee.includes('net.createConnection')));
+                if (matchedFacts.length === 0) return null;
+            }
+
+            // Specialist Rule: Startup Mod (ZFT-012) requires specific file paths
+            if (rule.alias === 'STARTUP_SCRIPT_MOD' && req === 'FILE_WRITE_STARTUP') {
+                const startupFiles = ['package.json', '.npmrc', '.bashrc', '.zshrc'];
+                matchedFacts = matchedFacts.filter(f => f.path && startupFiles.some(s => f.path.includes(s)));
+                if (matchedFacts.length === 0) return null;
+            }
+
             triggers.push(...matchedFacts.map(f => ({ ...f, type: req })));
         }
 

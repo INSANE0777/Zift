@@ -100,6 +100,14 @@ class ASTCollector {
                     });
                 }
 
+                if (this.isStartupFileWrite(calleeCode, node, sourceCode)) {
+                    facts.FILE_WRITE_STARTUP.push({
+                        file: filePath,
+                        line: node.loc.start.line,
+                        path: node.arguments[0] ? sourceCode.substring(node.arguments[0].start, node.arguments[0].end) : 'unknown'
+                    });
+                }
+
                 node.arguments.forEach((arg, index) => {
                     const argCode = sourceCode.substring(arg.start, arg.end);
                     // Improved check: Does the expression contain any variable we know is tainted?
@@ -186,7 +194,7 @@ class ASTCollector {
     isNetworkSink(calleeCode) {
         const methodSinks = [
             'http.request', 'https.request', 'http.get', 'https.get',
-            'net.connect', 'dns.lookup', 'dns.resolve', 'dns.resolve4', 'dns.resolve6',
+            'net.connect', 'net.createConnection', 'dns.lookup', 'dns.resolve', 'dns.resolve4', 'dns.resolve6',
             'fetch', 'axios', 'request'
         ];
         // Improved matching for require('https').get patterns
@@ -210,7 +218,7 @@ class ASTCollector {
     }
 
     isEncoder(calleeCode) {
-        const encoders = ['Buffer.from', 'btoa', 'atob'];
+        const encoders = ['Buffer.from', 'btoa', 'atob', 'zlib.deflate', 'zlib.gzip', 'crypto.createCipheriv'];
         return encoders.some(enc => calleeCode === enc || calleeCode.endsWith('.' + enc));
     }
 
@@ -235,8 +243,20 @@ class ASTCollector {
 
         if (node.arguments.length > 0 && node.arguments[0].type === 'Literal') {
             const pathValue = String(node.arguments[0].value);
-            const sensitive = ['.ssh', '.env', 'shadow', 'passwd', 'credentials', 'token'];
+            const sensitive = ['.ssh', '.env', 'shadow', 'passwd', 'credentials', 'token', '_netrc', 'aws_access_key'];
             return sensitive.some((s) => pathValue.toLowerCase().includes(s));
+        }
+        return false;
+    }
+
+    isStartupFileWrite(calleeCode, node, sourceCode) {
+        if (!calleeCode.includes('fs.writeFile') && !calleeCode.includes('fs.writeFileSync') &&
+            !calleeCode.includes('fs.appendFile')) return false;
+
+        if (node.arguments.length > 0 && node.arguments[0].type === 'Literal') {
+            const pathValue = String(node.arguments[0].value);
+            const startup = ['package.json', '.npmrc', '.bashrc', '.zshrc', 'crontab', 'init.d', 'systemd'];
+            return startup.some((s) => pathValue.toLowerCase().includes(s));
         }
         return false;
     }
