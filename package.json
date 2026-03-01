@@ -1,6 +1,6 @@
 {
   "name": "@7nsane/zift",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "A high-performance, deterministic security scanner for npm packages.",
   "main": "src/scanner.js",
   "bin": {

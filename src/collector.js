@@ -153,7 +153,6 @@ class ASTCollector {
                     }
                 }
 
-                // De-obfuscation Trigger
                 const evaluated = this.tryEvaluate(node, sourceCode);
                 if (evaluated) {
                     if (this.getNetworkType(evaluated) || this.isShellSink(evaluated) || evaluated === 'eval' || evaluated === 'Function') {
@@ -254,6 +253,23 @@ class ASTCollector {
                         }
                     }
                 });
+
+                // v5.0 Symbolic Transformers: Buffer/Base64/Hex
+                if (calleeCode.includes('Buffer.from') || calleeCode.includes('.toString')) {
+                    const parent = ancestors[ancestors.length - 2];
+                    if (parent && parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
+                        const arg = node.arguments[0] ? sourceCode.substring(node.arguments[0].start, node.arguments[0].end) : null;
+                        if (arg) {
+                            flows.push({
+                                fromVar: arg,
+                                toVar: parent.id.name,
+                                file: filePath,
+                                line: node.loc.start.line,
+                                transformation: calleeCode.includes('base64') ? 'base64' : (calleeCode.includes('hex') ? 'hex' : 'buffer')
+                            });
+                        }
+                    }
+                }
             },
             MemberExpression: (node) => {
                 const objectCode = sourceCode.substring(node.object.start, node.object.end);
@@ -275,14 +291,9 @@ class ASTCollector {
                 }
             },
             VariableDeclarator: (node) => {
-                if (node.init && node.id.type === 'Identifier') {
+                if (node.init) {
                     const from = sourceCode.substring(node.init.start, node.init.end);
-                    flows.push({
-                        fromVar: from,
-                        toVar: node.id.name,
-                        file: filePath,
-                        line: node.loc.start.line
-                    });
+                    this.handlePattern(node.id, from, flows, filePath, node.loc.start.line);
                 }
             },
             AssignmentExpression: (node) => {
@@ -306,6 +317,9 @@ class ASTCollector {
                         file: filePath,
                         line: node.loc.start.line
                     });
+                } else if (node.left.type === 'ObjectPattern' || node.left.type === 'ArrayPattern') {
+                    const from = sourceCode.substring(node.right.start, node.right.end);
+                    this.handlePattern(node.left, from, flows, filePath, node.loc.start.line);
                 }
             },
             ObjectExpression: (node, state, ancestors) => {
@@ -420,6 +434,28 @@ class ASTCollector {
             return typeof result === 'string' ? result : null;
         } catch (e) {
             return null;
+        }
+    }
+
+    handlePattern(pattern, initCode, flows, filePath, line) {
+        if (pattern.type === 'Identifier') {
+            flows.push({ fromVar: initCode, toVar: pattern.name, file: filePath, line });
+        } else if (pattern.type === 'ObjectPattern') {
+            pattern.properties.forEach(prop => {
+                if (prop.type === 'Property') {
+                    const key = prop.key.type === 'Identifier' ? prop.key.name :
+                        (prop.key.type === 'Literal' ? prop.key.value : null);
+                    if (key) {
+                        this.handlePattern(prop.value, `${initCode}.${key}`, flows, filePath, line);
+                    }
+                }
+            });
+        } else if (pattern.type === 'ArrayPattern') {
+            pattern.elements.forEach((el, index) => {
+                if (el) {
+                    this.handlePattern(el, `${initCode}[${index}]`, flows, filePath, line);
+                }
+            });
         }
     }
 }

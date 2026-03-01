@@ -1,20 +1,20 @@
-# 🛡️ Zift (v4.0.0)
+# 🛡️ Zift (v4.1.0)
 
 [![npm version](https://img.shields.io/npm/v/@7nsane/zift.svg?style=flat-square)](https://www.npmjs.com/package/@7nsane/zift)
 [![License](https://img.shields.io/npm/l/@7nsane/zift.svg?style=flat-square)](https://www.npmjs.com/package/@7nsane/zift)
 [![Build Status](https://img.shields.io/badge/CI-passing-brightgreen?style=flat-square)](https://github.com/7nsane/zift)
 
-**The Deeply Hardened Ecosystem Security Engine for JavaScript.**
+**The Symbolically-Intelligent Ecosystem Security Engine for JavaScript.**
 
-Zift v4.0 is the "Deep Hardening" release, featuring **Immutable Runtime Guards** and **Opaque Payload Detection**, specifically designed to resist active attacker bypasses.
+Zift v5.0 is the "Intelligence" release, introducing **Symbolic Taint Analysis**. It can track sensitive data through complex code transformations, destructuring, and nested object structures across module boundaries.
 
-## 🚀 Key Advancements (v4.0.0)
+## 🚀 Key Advancements (v5.0.0)
 
-- **🛡️ Immutable Zift Shield**: Runtime sinks (`http`, `child_process`) are now immutable. Attackers cannot delete or re-assign them to bypass protection.
-- **🧩 Opaque Payload Detection**: Automatically flags compiled native binaries (`.node`) as high-risk.
-- **🧵 Universal Protection**: Zift Shield now automatically propagates into `worker_threads`.
-- **🕵️ Evasion Tracking**: Detects non-deterministic sink construction (e.g., using `Date.now()` or `Math.random()` to hide strings).
-- **🌍 Cross-File Intelligence**: Full multi-pass taint tracking for ESM and CommonJS.
+- **🧠 Symbolic Taint Analysis**: Tracks data through destructuring (`const { key } = process.env`) and deep property access (`obj.a.b.c`).
+- **🧬 Transformation Tracking**: Automatically follows taint through encoding methods like `Buffer.from(data).toString('base64')` or `hex`.
+- **🌍 Recursive Cross-File Intelligence**: Follows sensitive data even when it's re-exported through multiple intermediate files and objects.
+- **🛡️ Immutable Runtime Guards**: Structural protection for `http` and `child_process` sinks (v4.0 legacy).
+- **🧩 Opaque Payload Detection**: Flags native binaries (`.node`) and high-entropy skipped strings.
 
 ## 📦 Quick Start
 

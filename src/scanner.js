@@ -117,13 +117,13 @@ class PackageScanner {
         facts.EXPORTS.forEach(exp => {
             if (!exportMap.has(exp.file)) exportMap.set(exp.file, new Map());
 
-            // Check if localName is tainted in this file
-            const isLocalTainted = flows.some(f => f.file === exp.file && f.toVar === exp.local && f.fromVar.includes('process.env'));
-            const isNamedTainted = flows.some(f => f.file === exp.file && f.toVar === exp.name && f.fromVar.includes('process.env'));
+            // Check if localName is tainted (recursively)
+            const resolvedTaint = this.isVariableTainted(exp.local || exp.name, exp.file, flows);
 
             exportMap.get(exp.file).set(exp.name, {
                 local: exp.local,
-                isTainted: isLocalTainted || isNamedTainted
+                isTainted: !!resolvedTaint,
+                taintPath: resolvedTaint
             });
         });
 
@@ -132,7 +132,7 @@ class PackageScanner {
             let resolvedPath;
             if (imp.source.startsWith('.')) {
                 resolvedPath = path.resolve(path.dirname(imp.file), imp.source);
-                if (!resolvedPath.endsWith('.js')) resolvedPath += '.js';
+                if (!resolvedPath.endsWith('.js') && fs.existsSync(resolvedPath + '.js')) resolvedPath += '.js';
             }
 
             if (resolvedPath && exportMap.has(resolvedPath)) {
@@ -140,16 +140,48 @@ class PackageScanner {
                 const matchedExport = targetExports.get(imp.imported);
 
                 if (matchedExport && matchedExport.isTainted) {
-                    // Mark as a virtual ENV_READ in the importing file
                     facts.ENV_READ.push({
                         file: imp.file,
                         line: imp.line,
-                        variable: `[Cross-File] ${imp.local} (from ${imp.source})`,
+                        variable: `[Symbolic Cross-File] ${imp.local} <- ${matchedExport.taintPath} (from ${imp.source})`,
                         isCrossFile: true
+                    });
+
+                    // Propagate further as a flow in this file
+                    flows.push({
+                        fromVar: matchedExport.taintPath,
+                        toVar: imp.local,
+                        file: imp.file,
+                        line: imp.line,
+                        type: 'cross-file-import'
                     });
                 }
             }
         });
+    }
+
+    isVariableTainted(varName, filePath, flows, visited = new Set()) {
+        if (!varName) return null;
+        const key = `${filePath}:${varName}`;
+        if (visited.has(key)) return null;
+        visited.add(key);
+
+        if (varName.includes('process.env')) return varName;
+
+        const incoming = flows.filter(f => f.file === filePath && f.toVar === varName);
+        for (const flow of incoming) {
+            const result = this.isVariableTainted(flow.fromVar, filePath, flows, visited);
+            if (result) return result;
+        }
+
+        // Check for property access patterns if base object is tainted
+        if (varName.includes('.')) {
+            const base = varName.split('.')[0];
+            const result = this.isVariableTainted(base, filePath, flows, visited);
+            if (result) return `${result}.${varName.split('.').slice(1).join('.')}`;
+        }
+
+        return null;
     }
 
     async getFiles() {
