@@ -48,7 +48,6 @@ class ASTCollector {
             CallExpression: (node) => {
                 const calleeCode = this.getSourceCode(node.callee);
 
-                // Detect eval / Function
                 if (calleeCode === 'eval' || calleeCode === 'Function') {
                     this.facts.DYNAMIC_EXECUTION.push({
                         file: filePath,
@@ -57,7 +56,6 @@ class ASTCollector {
                     });
                 }
 
-                // Detect Sinks
                 if (this.isNetworkSink(calleeCode)) {
                     this.facts.NETWORK_SINK.push({
                         file: filePath,
@@ -66,7 +64,6 @@ class ASTCollector {
                     });
                 }
 
-                // Detect Sources
                 if (this.isSensitiveFileRead(calleeCode, node)) {
                     this.facts.FILE_READ_SENSITIVE.push({
                         file: filePath,
@@ -77,11 +74,10 @@ class ASTCollector {
             },
             MemberExpression: (node) => {
                 const objectCode = this.getSourceCode(node.object);
-                // Detect process.env
                 if (objectCode === 'process.env' || objectCode === 'process["env"]' || objectCode === "process['env']") {
                     const property = node.property.name || (node.property.type === 'Literal' ? node.property.value : null);
                     const whitelist = ['NODE_ENV', 'TIMING', 'DEBUG', 'VERBOSE', 'CI', 'APPDATA', 'HOME', 'USERPROFILE', 'PATH', 'PWD'];
-                    if (whitelist.includes(property)) return; // Whitelist common env check
+                    if (whitelist.includes(property)) return;
 
                     this.facts.ENV_READ.push({
                         file: filePath,
@@ -98,6 +94,39 @@ class ASTCollector {
                         toVar: node.id.name,
                         file: filePath,
                         line: node.loc.start.line
+                    });
+                }
+            },
+            AssignmentExpression: (node) => {
+                if (node.left.type === 'MemberExpression' && node.right.type === 'Identifier') {
+                    // Track property assignments: obj.prop = taintedVar
+                    const from = this.getSourceCode(node.right);
+                    const to = this.getSourceCode(node.left);
+                    this.flows.push({
+                        fromVar: from,
+                        toVar: to,
+                        file: filePath,
+                        line: node.loc.start.line
+                    });
+                }
+            },
+            ObjectExpression: (node, state, ancestors) => {
+                // Track object literal property assignments: const x = { p: process.env }
+                const parent = ancestors[ancestors.length - 2];
+                if (parent && parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
+                    const objName = parent.id.name;
+                    node.properties.forEach(prop => {
+                        if (prop.value.type === 'MemberExpression') {
+                            const valCode = this.getSourceCode(prop.value);
+                            if (valCode.includes('process.env')) {
+                                this.flows.push({
+                                    fromVar: valCode,
+                                    toVar: `${objName}.${this.getSourceCode(prop.key)}`,
+                                    file: filePath,
+                                    line: prop.loc.start.line
+                                });
+                            }
+                        }
                     });
                 }
             }
