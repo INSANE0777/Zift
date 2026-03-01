@@ -1,4 +1,6 @@
 *.log
+*.txt
+git_error.txt
 .npmrc
 .npmignore
 node_modules/
