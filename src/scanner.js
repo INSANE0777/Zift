@@ -27,13 +27,20 @@ class PackageScanner {
         let allFacts = {
             facts: {
                 ENV_READ: [],
+                MASS_ENV_ACCESS: [],
                 FILE_READ_SENSITIVE: [],
                 NETWORK_SINK: [],
+                DNS_SINK: [],
+                RAW_SOCKET_SINK: [],
                 DYNAMIC_EXECUTION: [],
+                DYNAMIC_REQUIRE: [],
                 OBFUSCATION: [],
                 FILE_WRITE_STARTUP: [],
                 SHELL_EXECUTION: [],
-                ENCODER_USE: []
+                ENCODER_USE: [],
+                REMOTE_FETCH_SIGNAL: [],
+                PIPE_TO_SHELL_SIGNAL: [],
+                LIFECYCLE_CONTEXT: []
             },
             flows: []
         };
@@ -78,6 +85,11 @@ class PackageScanner {
                 }
 
                 // Merge facts (Synchronized)
+                if (lifecycleFiles.has(file)) {
+                    facts.LIFECYCLE_CONTEXT = facts.LIFECYCLE_CONTEXT || [];
+                    facts.LIFECYCLE_CONTEXT.push({ file, reason: 'Lifecycle script context detected' });
+                }
+
                 for (const category in facts) {
                     if (allFacts.facts[category]) {
                         allFacts.facts[category].push(...facts[category]);

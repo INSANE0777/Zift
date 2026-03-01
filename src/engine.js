@@ -6,7 +6,7 @@ class SafetyEngine {
     }
 
     evaluate(packageFacts, lifecycleFiles) {
-        const findings = [];
+        let findings = [];
 
         // Process each rule
         for (const rule of RULES) {
@@ -15,6 +15,9 @@ class SafetyEngine {
                 findings.push(match);
             }
         }
+
+        // Sort by score (desc) and then by priority (desc)
+        findings.sort((a, b) => (b.score - a.score) || (b.priority - a.priority));
 
         return findings;
     }
@@ -29,34 +32,11 @@ class SafetyEngine {
         for (const req of rule.requires) {
             let matchedFacts = facts[req] || [];
 
-            // Special case for dynamic require (which shares DYNAMIC_EXECUTION fact type)
-            if (rule.alias === 'DYNAMIC_REQUIRE_DEPENDENCY') {
-                matchedFacts = matchedFacts.filter(f => f.type === 'dynamic_require');
-            } else if (req === 'DYNAMIC_EXECUTION') {
-                matchedFacts = matchedFacts.filter(f => f.type !== 'dynamic_require');
-            }
+            // Specialist Rule: Startup Mod (ZFT-012) requires specific file paths (now explicit in definitions but engine may still help)
+            // But per review, we should aim for explicit facts.
+            // ZFT-012 now just requires FILE_WRITE_STARTUP. Simple.
 
             if (matchedFacts.length === 0) return null; // Rule not matched
-
-            // Specialist Rule: DNS Exfiltration (ZFT-007) requires a DNS-specific sink
-            if (rule.alias === 'DNS_EXFILTRATION' && req === 'NETWORK_SINK') {
-                matchedFacts = matchedFacts.filter(f => f.callee && f.callee.includes('dns'));
-                if (matchedFacts.length === 0) return null;
-            }
-
-            // Specialist Rule: Raw Socket Tunnel (ZFT-011) requires net.connect or similar
-            if (rule.alias === 'RAW_SOCKET_TUNNEL' && req === 'NETWORK_SINK') {
-                matchedFacts = matchedFacts.filter(f => f.callee && (f.callee.includes('net.connect') || f.callee.includes('net.createConnection')));
-                if (matchedFacts.length === 0) return null;
-            }
-
-            // Specialist Rule: Startup Mod (ZFT-012) requires specific file paths
-            if (rule.alias === 'STARTUP_SCRIPT_MOD' && req === 'FILE_WRITE_STARTUP') {
-                const startupFiles = ['package.json', '.npmrc', '.bashrc', '.zshrc'];
-                matchedFacts = matchedFacts.filter(f => f.path && startupFiles.some(s => f.path.includes(s)));
-                if (matchedFacts.length === 0) return null;
-            }
-
             triggers.push(...matchedFacts.map(f => ({ ...f, type: req })));
         }
 
@@ -71,10 +51,10 @@ class SafetyEngine {
             }
         }
 
-        // Apply Lifecycle Multiplier (2.0x for V2)
-        const isInLifecycle = triggers.some(t => lifecycleFiles.has(t.file));
+        // Check for Lifecycle Context Fact (Virtual or Actual)
+        const isInLifecycle = triggers.some(t => lifecycleFiles.has(t.file)) || (facts['LIFECYCLE_CONTEXT'] && facts['LIFECYCLE_CONTEXT'].length > 0);
         if (isInLifecycle) {
-            multiplier = 2.0;
+            multiplier *= 2.0;
         }
 
         // Encoder Multiplier (1.5x)
@@ -84,18 +64,18 @@ class SafetyEngine {
         }
 
         // Cluster Bonus: Source + Sink
-        const hasSource = triggers.some(t => t.type.includes('READ'));
-        const hasSink = triggers.some(t => t.type.includes('SINK') || t.type === 'DYNAMIC_EXECUTION' || t.type === 'SHELL_EXECUTION');
+        const hasSource = triggers.some(t => t.type.includes('READ') || t.type.includes('ACCESS'));
+        const hasSink = triggers.some(t => t.type.includes('SINK') || t.type === 'DYNAMIC_EXECUTION' || t.type === 'SHELL_EXECUTION' || t.type === 'DYNAMIC_REQUIRE');
         if (hasSource && hasSink) {
             baseScore += 40;
         }
 
         let finalScore = baseScore * multiplier;
 
-        // Severe Cluster: ENV_READ + (NETWORK_SINK | SHELL_EXECUTION) + lifecycleContext = Critical (100)
-        const isEnvRead = triggers.some(t => t.type === 'ENV_READ');
-        const isDangerousSink = triggers.some(t => t.type === 'NETWORK_SINK' || t.type === 'SHELL_EXECUTION');
-        if (isEnvRead && isDangerousSink && isInLifecycle) {
+        // Severe Cluster: SENSITIVE_READ + Dangerous Sink + lifecycleContext = Critical (100)
+        const isSensitiveRead = triggers.some(t => t.type === 'ENV_READ' || t.type === 'FILE_READ_SENSITIVE');
+        const isDangerousSink = triggers.some(t => t.type === 'NETWORK_SINK' || t.type === 'DNS_SINK' || t.type === 'RAW_SOCKET_SINK' || t.type === 'SHELL_EXECUTION');
+        if (isSensitiveRead && isDangerousSink && isInLifecycle) {
             finalScore = 100;
         }
 
@@ -103,6 +83,7 @@ class SafetyEngine {
             id: rule.id,
             alias: rule.alias,
             name: rule.name,
+            priority: rule.priority || 1,
             score: Math.min(finalScore, 100),
             triggers: triggers,
             description: rule.description,

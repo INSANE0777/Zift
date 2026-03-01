@@ -1,0 +1,12 @@
+≡ƒ¢í∩╕Å Verifying Zift v2.2.0 Deterministic Architecture...
+≡ƒôè Audit Results:
+- [Priority: 1, Score: 100] ZFT-005: Shell Command Execution
+- [Priority: 1, Score: 80] ZFT-001: Environment Variable Exfiltration
+
+≡ƒöì Structural Verification:
+- DNS Exfil detected: false
+- Env Exfil detected: true
+- Remote Dropper detected: false
+- Mass Env Access detected: false
+- Dynamic Require detected: false
+Γ¥î v2.2.0 Verification incomplete. Some rules did not trigger as expected.

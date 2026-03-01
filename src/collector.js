@@ -12,16 +12,23 @@ class ASTCollector {
     collect(code, filePath) {
         const facts = {
             ENV_READ: [],
+            MASS_ENV_ACCESS: [],
             FILE_READ_SENSITIVE: [],
             NETWORK_SINK: [],
+            DNS_SINK: [],
+            RAW_SOCKET_SINK: [],
             DYNAMIC_EXECUTION: [],
+            DYNAMIC_REQUIRE: [],
             OBFUSCATION: [],
             FILE_WRITE_STARTUP: [],
             SHELL_EXECUTION: [],
-            ENCODER_USE: []
+            ENCODER_USE: [],
+            REMOTE_FETCH_SIGNAL: [],
+            PIPE_TO_SHELL_SIGNAL: []
         };
         const flows = [];
         const sourceCode = code;
+        let envAccessCount = 0;
 
         let ast;
         try {
@@ -60,16 +67,16 @@ class ASTCollector {
                 }
 
                 if (calleeCode === 'require' && node.arguments.length > 0 && node.arguments[0].type !== 'Literal') {
-                    facts.DYNAMIC_EXECUTION.push({
+                    facts.DYNAMIC_REQUIRE.push({
                         file: filePath,
                         line: node.loc.start.line,
-                        type: 'dynamic_require',
                         variable: sourceCode.substring(node.arguments[0].start, node.arguments[0].end)
                     });
                 }
 
-                if (this.isNetworkSink(calleeCode)) {
-                    facts.NETWORK_SINK.push({
+                const netType = this.getNetworkType(calleeCode);
+                if (netType) {
+                    facts[netType].push({
                         file: filePath,
                         line: node.loc.start.line,
                         callee: calleeCode
@@ -81,6 +88,19 @@ class ASTCollector {
                         file: filePath,
                         line: node.loc.start.line,
                         callee: calleeCode
+                    });
+
+                    // Signal Analysis: Dropper Patterns
+                    node.arguments.forEach(arg => {
+                        if (arg.type === 'Literal' && typeof arg.value === 'string') {
+                            const val = arg.value.toLowerCase();
+                            if ((val.includes('curl') || val.includes('wget') || val.includes('fetch')) && (val.includes('http') || val.includes('//'))) {
+                                facts.REMOTE_FETCH_SIGNAL.push({ file: filePath, line: node.loc.start.line, context: val });
+                            }
+                            if (val.includes('| sh') || val.includes('| bash') || val.includes('| cmd') || val.includes('| pwsh')) {
+                                facts.PIPE_TO_SHELL_SIGNAL.push({ file: filePath, line: node.loc.start.line, context: val });
+                            }
+                        }
                     });
                 }
 
@@ -110,7 +130,6 @@ class ASTCollector {
 
                 node.arguments.forEach((arg, index) => {
                     const argCode = sourceCode.substring(arg.start, arg.end);
-                    // Improved check: Does the expression contain any variable we know is tainted?
                     const isArgTainted = argCode.includes('process.env') || flows.some(f => {
                         const regex = new RegExp(`\\b${f.toVar}\\b`);
                         return regex.test(argCode);
@@ -137,11 +156,16 @@ class ASTCollector {
                     const whitelist = ['NODE_ENV', 'TIMING', 'DEBUG', 'VERBOSE', 'CI', 'APPDATA', 'HOME', 'USERPROFILE', 'PATH', 'PWD'];
                     if (whitelist.includes(property)) return;
 
+                    envAccessCount++;
                     facts.ENV_READ.push({
                         file: filePath,
                         line: node.loc.start.line,
                         variable: property ? `process.env.${property}` : 'process.env'
                     });
+
+                    if (envAccessCount > 5) {
+                        facts.MASS_ENV_ACCESS.push({ file: filePath, line: node.loc.start.line, count: envAccessCount });
+                    }
                 }
             },
             VariableDeclarator: (node) => {
@@ -191,20 +215,21 @@ class ASTCollector {
         return { facts, flows };
     }
 
-    isNetworkSink(calleeCode) {
-        const methodSinks = [
-            'http.request', 'https.request', 'http.get', 'https.get',
-            'net.connect', 'net.createConnection', 'dns.lookup', 'dns.resolve', 'dns.resolve4', 'dns.resolve6',
-            'fetch', 'axios', 'request'
-        ];
-        // Improved matching for require('https').get patterns
-        return methodSinks.some(sink => {
+    getNetworkType(calleeCode) {
+        const dnsSinks = ['dns.lookup', 'dns.resolve', 'dns.resolve4', 'dns.resolve6'];
+        const rawSocketSinks = ['net.connect', 'net.createConnection'];
+        const networkSinks = ['http.request', 'https.request', 'http.get', 'https.get', 'fetch', 'axios', 'request'];
+
+        if (dnsSinks.some(sink => calleeCode === sink || calleeCode.endsWith('.' + sink))) return 'DNS_SINK';
+        if (rawSocketSinks.some(sink => calleeCode === sink || calleeCode.endsWith('.' + sink))) return 'RAW_SOCKET_SINK';
+        if (networkSinks.some(sink => {
             if (calleeCode === sink) return true;
             if (calleeCode.endsWith('.' + sink)) return true;
-            // Catch cases like require('https').get
             if (sink.includes('.') && calleeCode.endsWith(sink.split('.')[1]) && calleeCode.includes(sink.split('.')[0])) return true;
             return false;
-        }) && !calleeCode.includes('IdleCallback');
+        })) return 'NETWORK_SINK';
+
+        return null;
     }
 
     isShellSink(calleeCode) {
