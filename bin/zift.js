@@ -23,6 +23,10 @@ async function main() {
     runInit();
     return;
   }
+  if (args[0] === 'protect') {
+    runShield(args.slice(1));
+    return;
+  }
 
   // 2. Detection for bun/pnpm usage
   if (args.includes('--bun')) installer = 'bun';
@@ -238,10 +242,11 @@ function runInit() {
 }
 
 function showHelp() {
-  console.log(chalk.blue.bold('\n🛡️  Zift v2.0.0 - Intelligent Pre-install Security Gate\n'));
+  console.log(chalk.blue.bold('\n🛡️  Zift v3.0.0 - Intelligent Ecosystem Security\n'));
   console.log('Usage:');
   console.log('  zift setup           Secure npm, bun, and pnpm');
   console.log('  zift init            Initialize configuration');
+  console.log('  zift protect <app>   Run application with Zift Shield');
   console.log('  zift install <pkg>   Scan and install package');
   console.log('  zift .               Scan current directory');
   console.log('\nOptions:');
@@ -270,6 +275,20 @@ function printSummary(findings) {
   const s = getSummary(findings);
   console.log(chalk.bold('Severity Summary:'));
   console.log(chalk.red(`  Critical: ${s.Critical}\n  High:     ${s.High}`));
+}
+
+function runShield(appArgs) {
+  if (appArgs.length === 0) {
+    console.error(chalk.red('❌ Error: Specify an application to protect (e.g., zift protect main.js)'));
+    process.exit(1);
+  }
+
+  const shieldPath = path.join(__dirname, '../src/shield.js');
+  const nodeArgs = ['-r', shieldPath, ...appArgs];
+
+  console.log(chalk.blue(`\n🛡️  Launching with Zift Shield...`));
+  const child = cp.spawn('node', nodeArgs, { stdio: 'inherit' });
+  child.on('exit', (code) => process.exit(code));
 }
 
 main();

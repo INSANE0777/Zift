@@ -24,6 +24,7 @@ class PackageScanner {
             try { fs.mkdirSync(cacheDir, { recursive: true }); } catch (e) { }
         }
 
+        // Initialize fact storage
         let allFacts = {
             facts: {
                 ENV_READ: [],
@@ -40,14 +41,16 @@ class PackageScanner {
                 ENCODER_USE: [],
                 REMOTE_FETCH_SIGNAL: [],
                 PIPE_TO_SHELL_SIGNAL: [],
-                LIFECYCLE_CONTEXT: []
+                LIFECYCLE_CONTEXT: [],
+                EXPORTS: [],
+                IMPORTS: []
             },
             flows: []
         };
 
         const pkgVersion = require('../package.json').version;
 
-        // Parallel processing with limited concurrency (8 files at a time)
+        // Pass 1: Collection
         const concurrency = 8;
         for (let i = 0; i < files.length; i += concurrency) {
             const chunk = files.slice(i, i + concurrency);
@@ -62,45 +65,82 @@ class PackageScanner {
                 let facts = {}, flows = [];
 
                 if (fs.existsSync(cachePath)) {
-                    // Cache hit: Load metadata
                     try {
                         const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
                         facts = cached.facts || {};
                         flows = cached.flows || [];
                     } catch (e) {
-                        // Corrupt cache: re-scan
                         const result = this.collector.collect(code, file);
                         facts = result.facts;
                         flows = result.flows;
                     }
                 } else {
-                    // Cache miss: Scan and save
                     const result = this.collector.collect(code, file);
                     facts = result.facts;
                     flows = result.flows;
-
-                    try {
-                        fs.writeFileSync(cachePath, JSON.stringify({ facts, flows }));
-                    } catch (e) { }
+                    try { fs.writeFileSync(cachePath, JSON.stringify({ facts, flows })); } catch (e) { }
                 }
 
-                // Merge facts (Synchronized)
                 if (lifecycleFiles.has(file)) {
                     facts.LIFECYCLE_CONTEXT = facts.LIFECYCLE_CONTEXT || [];
                     facts.LIFECYCLE_CONTEXT.push({ file, reason: 'Lifecycle script context detected' });
                 }
 
                 for (const category in facts) {
-                    if (allFacts.facts[category]) {
-                        allFacts.facts[category].push(...facts[category]);
-                    }
+                    if (allFacts.facts[category]) allFacts.facts[category].push(...facts[category]);
                 }
                 allFacts.flows.push(...flows);
             }));
         }
 
+        // Pass 2: Cross-File Taint Resolution
+        this.resolveCrossFileTaint(allFacts);
+
         const findings = this.engine.evaluate(allFacts, lifecycleFiles);
         return this.formatFindings(findings);
+    }
+
+    resolveCrossFileTaint(allFacts) {
+        const { facts, flows } = allFacts;
+        const exportMap = new Map(); // file -> exportName -> localName/isTainted
+
+        // 1. Build Export Map
+        facts.EXPORTS.forEach(exp => {
+            if (!exportMap.has(exp.file)) exportMap.set(exp.file, new Map());
+
+            // Check if localName is tainted in this file
+            const isLocalTainted = flows.some(f => f.file === exp.file && f.toVar === exp.local && f.fromVar.includes('process.env'));
+            const isNamedTainted = flows.some(f => f.file === exp.file && f.toVar === exp.name && f.fromVar.includes('process.env'));
+
+            exportMap.get(exp.file).set(exp.name, {
+                local: exp.local,
+                isTainted: isLocalTainted || isNamedTainted
+            });
+        });
+
+        // 2. Propagate to Imports
+        facts.IMPORTS.forEach(imp => {
+            let resolvedPath;
+            if (imp.source.startsWith('.')) {
+                resolvedPath = path.resolve(path.dirname(imp.file), imp.source);
+                if (!resolvedPath.endsWith('.js')) resolvedPath += '.js';
+            }
+
+            if (resolvedPath && exportMap.has(resolvedPath)) {
+                const targetExports = exportMap.get(resolvedPath);
+                const matchedExport = targetExports.get(imp.imported);
+
+                if (matchedExport && matchedExport.isTainted) {
+                    // Mark as a virtual ENV_READ in the importing file
+                    facts.ENV_READ.push({
+                        file: imp.file,
+                        line: imp.line,
+                        variable: `[Cross-File] ${imp.local} (from ${imp.source})`,
+                        isCrossFile: true
+                    });
+                }
+            }
+        });
     }
 
     async getFiles() {

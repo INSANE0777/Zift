@@ -1,5 +1,0 @@
---- Running Safety Watch Test ---
-✅ Success: Detected 2 findings.
- - [Critical] ENV_EXFILTRATION (Score: 100)
- - [Low] OBFUSCATED_EXECUTION (Score: 40)
-✅ Success: Correctly identified ENV_EXFILTRATION.

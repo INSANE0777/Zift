@@ -1,5 +1,6 @@
 const acorn = require('acorn');
 const walk = require('acorn-walk');
+const vm = require('node:vm');
 const { calculateEntropy } = require('./utils/entropy');
 
 class ASTCollector {
@@ -24,7 +25,9 @@ class ASTCollector {
             SHELL_EXECUTION: [],
             ENCODER_USE: [],
             REMOTE_FETCH_SIGNAL: [],
-            PIPE_TO_SHELL_SIGNAL: []
+            PIPE_TO_SHELL_SIGNAL: [],
+            EXPORTS: [],
+            IMPORTS: []
         };
         const flows = [];
         const sourceCode = code;
@@ -55,6 +58,57 @@ class ASTCollector {
                     }
                 }
             },
+            ImportDeclaration: (node) => {
+                const source = node.source.value;
+                node.specifiers.forEach(spec => {
+                    facts.IMPORTS.push({
+                        file: filePath,
+                        line: node.loc.start.line,
+                        source,
+                        local: spec.local.name,
+                        imported: spec.type === 'ImportDefaultSpecifier' ? 'default' : (spec.imported ? spec.imported.name : null)
+                    });
+                });
+            },
+            ExportNamedDeclaration: (node) => {
+                if (node.declaration) {
+                    if (node.declaration.type === 'VariableDeclaration') {
+                        node.declaration.declarations.forEach(decl => {
+                            facts.EXPORTS.push({
+                                file: filePath,
+                                line: node.loc.start.line,
+                                name: decl.id.name,
+                                type: 'named'
+                            });
+                        });
+                    } else if (node.declaration.id) {
+                        facts.EXPORTS.push({
+                            file: filePath,
+                            line: node.loc.start.line,
+                            name: node.declaration.id.name,
+                            type: 'named'
+                        });
+                    }
+                }
+                node.specifiers.forEach(spec => {
+                    facts.EXPORTS.push({
+                        file: filePath,
+                        line: node.loc.start.line,
+                        name: spec.exported.name,
+                        local: spec.local.name,
+                        type: 'named'
+                    });
+                });
+            },
+            ExportDefaultDeclaration: (node) => {
+                facts.EXPORTS.push({
+                    file: filePath,
+                    line: node.loc.start.line,
+                    name: 'default',
+                    local: (node.declaration.id ? node.declaration.id.name : (node.declaration.name || null)),
+                    type: 'default'
+                });
+            },
             CallExpression: (node, state, ancestors) => {
                 const calleeCode = sourceCode.substring(node.callee.start, node.callee.end);
 
@@ -66,12 +120,38 @@ class ASTCollector {
                     });
                 }
 
-                if (calleeCode === 'require' && node.arguments.length > 0 && node.arguments[0].type !== 'Literal') {
-                    facts.DYNAMIC_REQUIRE.push({
-                        file: filePath,
-                        line: node.loc.start.line,
-                        variable: sourceCode.substring(node.arguments[0].start, node.arguments[0].end)
-                    });
+                if (calleeCode === 'require' && node.arguments.length > 0) {
+                    if (node.arguments[0].type !== 'Literal') {
+                        facts.DYNAMIC_REQUIRE.push({
+                            file: filePath,
+                            line: node.loc.start.line,
+                            variable: sourceCode.substring(node.arguments[0].start, node.arguments[0].end)
+                        });
+                    } else {
+                        const source = node.arguments[0].value;
+                        const parent = ancestors[ancestors.length - 2];
+                        if (parent && parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
+                            facts.IMPORTS.push({
+                                file: filePath, line: node.loc.start.line, source, local: parent.id.name, imported: 'default'
+                            });
+                        }
+                    }
+                }
+
+                // De-obfuscation Trigger
+                const evaluated = this.tryEvaluate(node, sourceCode);
+                if (evaluated) {
+                    if (this.getNetworkType(evaluated) || this.isShellSink(evaluated) || evaluated === 'eval' || evaluated === 'Function') {
+                        facts.OBFUSCATION.push({
+                            file: filePath,
+                            line: node.loc.start.line,
+                            reason: `De-obfuscated to: ${evaluated}`,
+                            revealed: evaluated
+                        });
+                        if (evaluated === 'eval' || evaluated === 'Function') {
+                            facts.DYNAMIC_EXECUTION.push({ file: filePath, line: node.loc.start.line, type: evaluated });
+                        }
+                    }
                 }
 
                 const netType = this.getNetworkType(calleeCode);
@@ -90,7 +170,6 @@ class ASTCollector {
                         callee: calleeCode
                     });
 
-                    // Signal Analysis: Dropper Patterns
                     node.arguments.forEach(arg => {
                         if (arg.type === 'Literal' && typeof arg.value === 'string') {
                             const val = arg.value.toLowerCase();
@@ -180,6 +259,17 @@ class ASTCollector {
                 }
             },
             AssignmentExpression: (node) => {
+                const leftCode = sourceCode.substring(node.left.start, node.left.end);
+                if (leftCode === 'module.exports' || leftCode.startsWith('exports.')) {
+                    facts.EXPORTS.push({
+                        file: filePath,
+                        line: node.loc.start.line,
+                        name: leftCode === 'module.exports' ? 'default' : leftCode.replace('exports.', ''),
+                        local: (node.right.type === 'Identifier' ? node.right.name : null),
+                        type: leftCode === 'module.exports' ? 'default' : 'named'
+                    });
+                }
+
                 if (node.left.type === 'MemberExpression' && node.right.type === 'Identifier') {
                     const from = sourceCode.substring(node.right.start, node.right.end);
                     const to = sourceCode.substring(node.left.start, node.left.end);
@@ -216,6 +306,7 @@ class ASTCollector {
     }
 
     getNetworkType(calleeCode) {
+        if (typeof calleeCode !== 'string') return null;
         const dnsSinks = ['dns.lookup', 'dns.resolve', 'dns.resolve4', 'dns.resolve6'];
         const rawSocketSinks = ['net.connect', 'net.createConnection'];
         const networkSinks = ['http.request', 'https.request', 'http.get', 'https.get', 'fetch', 'axios', 'request'];
@@ -233,6 +324,7 @@ class ASTCollector {
     }
 
     isShellSink(calleeCode) {
+        if (typeof calleeCode !== 'string') return false;
         const shellSinks = ['child_process.exec', 'child_process.spawn', 'child_process.execSync', 'exec', 'spawn', 'execSync'];
         return shellSinks.some(sink => {
             if (calleeCode === sink) return true;
@@ -243,6 +335,7 @@ class ASTCollector {
     }
 
     isEncoder(calleeCode) {
+        if (typeof calleeCode !== 'string') return false;
         const encoders = ['Buffer.from', 'btoa', 'atob', 'zlib.deflate', 'zlib.gzip', 'crypto.createCipheriv'];
         return encoders.some(enc => calleeCode === enc || calleeCode.endsWith('.' + enc));
     }
@@ -263,6 +356,7 @@ class ASTCollector {
     }
 
     isSensitiveFileRead(calleeCode, node, sourceCode) {
+        if (typeof calleeCode !== 'string') return false;
         if (!calleeCode.includes('fs.readFile') && !calleeCode.includes('fs.readFileSync') &&
             !calleeCode.includes('fs.promises.readFile')) return false;
 
@@ -275,6 +369,7 @@ class ASTCollector {
     }
 
     isStartupFileWrite(calleeCode, node, sourceCode) {
+        if (typeof calleeCode !== 'string') return false;
         if (!calleeCode.includes('fs.writeFile') && !calleeCode.includes('fs.writeFileSync') &&
             !calleeCode.includes('fs.appendFile')) return false;
 
@@ -286,8 +381,19 @@ class ASTCollector {
         return false;
     }
 
-    getSourceCode(node) {
-        return this.sourceCode.substring(node.start, node.end);
+    tryEvaluate(node, sourceCode) {
+        try {
+            const code = sourceCode.substring(node.start, node.end);
+            if (code.includes('process') || code.includes('require') || code.includes('fs') || code.includes('child_process')) return null;
+            if (!code.includes('[') && !code.includes('+') && !code.includes('join') && !code.includes('reverse')) return null;
+
+            const script = new vm.Script(code);
+            const context = vm.createContext({});
+            const result = script.runInContext(context, { timeout: 50 });
+            return typeof result === 'string' ? result : null;
+        } catch (e) {
+            return null;
+        }
     }
 }
 
