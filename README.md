@@ -8,13 +8,14 @@
 
 Zift v4.1 is the "Intelligence" release, introducing **Symbolic Taint Analysis**. It can track sensitive data through complex code transformations, destructuring, and nested object structures across module boundaries.
 
-## 🚀 Key Advancements (v5.0.0)
+## 🚀 Key Advancements (v4.1.0)
 
 - **🧠 Symbolic Taint Analysis**: Tracks data through destructuring (`const { key } = process.env`) and deep property access (`obj.a.b.c`).
 - **🧬 Transformation Tracking**: Automatically follows taint through encoding methods like `Buffer.from(data).toString('base64')` or `hex`.
-- **🌍 Recursive Cross-File Intelligence**: Follows sensitive data even when it's re-exported through multiple intermediate files and objects.
-- **🛡️ Immutable Runtime Guards**: Structural protection for `http` and `child_process` sinks (v4.0 legacy).
-- **🧩 Opaque Payload Detection**: Flags native binaries (`.node`) and high-entropy skipped strings.
+- **🐛 Worm & Propagation Defense**: Detects the chain of credential theft, data exfiltration, and self-publishing (registry hijacking).
+- **🛡️ Deep Behavioral Hardening**: Flags wipers (recursive deletions), CI/CD secret theft, and unauthorized module/git tampering.
+- **📡 OS Fingerprinting Detection**: Identifies system targeting behaviors (os.platform, arch) coupled with network activity.
+- **📦 Lifecycle-Specific Intelligence**: Detects remote fetches and binary drops occurring during sensitive contexts like `preinstall`.
 
 ## 📦 Quick Start
 
