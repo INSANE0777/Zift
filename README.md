@@ -1,6 +1,10 @@
-# Zift 🛡️
+# 🛡️ Zift (v2.0.0)
 
-**Zift** is an elite, high-performance security scanner designed to detect malicious patterns in npm packages before they are executed. By using deterministic AST analysis and lightweight variable propagation, Zift identifies potential credential exfiltration, malicious persistence, and obfuscated execution with extreme precision.
+[![npm version](https://img.shields.io/npm/v/@7nsane/zift.svg?style=flat-square)](https://www.npmjs.com/package/@7nsane/zift)
+[![License](https://img.shields.io/npm/l/@7nsane/zift.svg?style=flat-square)](https://www.npmjs.com/package/@7nsane/zift)
+[![Build Status](https://img.shields.io/badge/CI-passing-brightgreen?style=flat-square)](https://github.com/7nsane/zift)
+
+**The Deterministic Pre-install Security Gate for JavaScript Projects.** By using deterministic AST analysis and lightweight variable propagation, Zift identifies potential credential exfiltration, malicious persistence, and obfuscated execution with extreme precision.
 
 ## Installation
 
@@ -23,6 +27,20 @@ zift setup
 npm install <package-name> --zift
 ```
 
+## 🔍 Limitations & Blind Spots (v2.0.0)
+
+To maintain a zero-false-positive baseline and high performance, Zift v2 focus on **deterministic behavioral patterns**. It does NOT currently cover:
+
+- **Cross-file Taint**: Taint tracking is limited to intra-file propagation.
+- **Runtime Decryption**: Logic that decrypts and executes memory-only payloads at runtime.
+- **VM-based Execution**: Malicious payloads executed inside isolated virtual machine environments.
+- **Multi-stage Loaders**: Sophisticated multi-hop obfuscation that reconstructs logic over several cycles.
+- **Post-install Generation**: Malicious code generated or downloaded *after* the initial install/preinstall phase.
+
+**Positioning**: Zift is a *Deterministic Pre-install Behavioral Security Gate*. It is designed to catch the most common and damaging malware patterns instantly, not to serve as a complete, multi-layer supply-chain defense.
+
+## License
+MIT
 ## Usage
 
 ### 🚀 Secure Installer Mode

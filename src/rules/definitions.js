@@ -31,13 +31,30 @@ const RULES = [
         requires: ['OBFUSCATION', 'DYNAMIC_EXECUTION'],
         baseScore: 40,
         description: 'Detection of high-entropy strings being executed via eval or Function constructor.'
+    },
+    {
+        id: 'ZFT-005',
+        alias: 'SHELL_COMMAND_EXECUTION',
+        name: 'Shell Command Execution',
+        requires: ['SHELL_EXECUTION'],
+        optional: ['ENV_READ', 'FILE_READ_SENSITIVE'],
+        baseScore: 50,
+        description: 'Detection of shell command execution (child_process).'
+    },
+    {
+        id: 'ZFT-006',
+        alias: 'DYNAMIC_REQUIRE_DEPENDENCY',
+        name: 'Dynamic Require Dependency',
+        requires: ['DYNAMIC_EXECUTION'], // Will check if type === 'dynamic_require' in engine
+        baseScore: 30,
+        description: 'Detection of dynamic require calls where the dependency name is a variable.'
     }
 ];
 
 const CATEGORIES = {
     SOURCES: ['ENV_READ', 'FILE_READ_SENSITIVE'],
-    SINKS: ['NETWORK_SINK', 'DYNAMIC_EXECUTION'],
-    OBFUSCATION: ['OBFUSCATION'],
+    SINKS: ['NETWORK_SINK', 'DYNAMIC_EXECUTION', 'SHELL_EXECUTION'],
+    SIGNALS: ['OBFUSCATION', 'ENCODER_USE'],
     PERSISTENCE: ['FILE_WRITE_STARTUP']
 };
 

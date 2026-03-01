@@ -5,11 +5,12 @@ class LifecycleResolver {
     constructor(packageDir) {
         this.packageDir = packageDir;
         this.lifecycleFiles = new Set();
+        this.detectedScripts = {};
     }
 
     resolve() {
         const packageJsonPath = path.join(this.packageDir, 'package.json');
-        if (!fs.existsSync(packageJsonPath)) return this.lifecycleFiles;
+        if (!fs.existsSync(packageJsonPath)) return { files: this.lifecycleFiles, scripts: this.detectedScripts };
 
         try {
             const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
@@ -19,6 +20,7 @@ class LifecycleResolver {
 
             for (const hook of lifecycleHooks) {
                 if (scripts[hook]) {
+                    this.detectedScripts[hook] = scripts[hook];
                     this.extractFilesFromScript(scripts[hook]);
                 }
             }
@@ -26,7 +28,7 @@ class LifecycleResolver {
             // Ignore parse errors
         }
 
-        return this.lifecycleFiles;
+        return { files: this.lifecycleFiles, scripts: this.detectedScripts };
     }
 
     extractFilesFromScript(script) {

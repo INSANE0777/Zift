@@ -27,7 +27,15 @@ class SafetyEngine {
 
         // Check required facts
         for (const req of rule.requires) {
-            const matchedFacts = facts[req] || [];
+            let matchedFacts = facts[req] || [];
+
+            // Special case for dynamic require (which shares DYNAMIC_EXECUTION fact type)
+            if (rule.alias === 'DYNAMIC_REQUIRE_DEPENDENCY') {
+                matchedFacts = matchedFacts.filter(f => f.type === 'dynamic_require');
+            } else if (req === 'DYNAMIC_EXECUTION') {
+                matchedFacts = matchedFacts.filter(f => f.type !== 'dynamic_require');
+            }
+
             if (matchedFacts.length === 0) return null; // Rule not matched
             triggers.push(...matchedFacts.map(f => ({ ...f, type: req })));
         }
@@ -38,31 +46,37 @@ class SafetyEngine {
                 const matchedOpts = facts[opt] || [];
                 if (matchedOpts.length > 0) {
                     triggers.push(...matchedOpts.map(f => ({ ...f, type: opt })));
-                    baseScore += 20; // Bonus for optional matches (e.g., obfuscation)
+                    baseScore += 20;
                 }
             }
         }
 
-        // Apply Lifecycle Multiplier (1.8x)
+        // Apply Lifecycle Multiplier (2.0x for V2)
         const isInLifecycle = triggers.some(t => lifecycleFiles.has(t.file));
         if (isInLifecycle) {
-            multiplier = 1.8;
+            multiplier = 2.0;
+        }
+
+        // Encoder Multiplier (1.5x)
+        const hasEncoder = facts['ENCODER_USE'] && facts['ENCODER_USE'].length > 0;
+        if (hasEncoder) {
+            multiplier *= 1.5;
         }
 
         // Cluster Bonus: Source + Sink
         const hasSource = triggers.some(t => t.type.includes('READ'));
-        const hasSink = triggers.some(t => t.type.includes('SINK') || t.type === 'DYNAMIC_EXECUTION');
+        const hasSink = triggers.some(t => t.type.includes('SINK') || t.type === 'DYNAMIC_EXECUTION' || t.type === 'SHELL_EXECUTION');
         if (hasSource && hasSink) {
             baseScore += 40;
         }
 
         let finalScore = baseScore * multiplier;
 
-        // Lifecycle Guard: ENV_READ + NETWORK_SINK + lifecycleContext = min 85 (High)
+        // Severe Cluster: ENV_READ + (NETWORK_SINK | SHELL_EXECUTION) + lifecycleContext = Critical (100)
         const isEnvRead = triggers.some(t => t.type === 'ENV_READ');
-        const isNetworkSink = triggers.some(t => t.type === 'NETWORK_SINK');
-        if (isEnvRead && isNetworkSink && isInLifecycle && finalScore < 85) {
-            finalScore = 85;
+        const isDangerousSink = triggers.some(t => t.type === 'NETWORK_SINK' || t.type === 'SHELL_EXECUTION');
+        if (isEnvRead && isDangerousSink && isInLifecycle) {
+            finalScore = 100;
         }
 
         return {

@@ -14,9 +14,13 @@ async function main() {
   let isInstallMode = false;
   let installer = 'npm';
 
-  // 1. Setup Command
+  // 1. Setup & Init Commands
   if (args[0] === 'setup') {
     await runSetup();
+    return;
+  }
+  if (args[0] === 'init') {
+    runInit();
     return;
   }
 
@@ -117,6 +121,15 @@ ${cmd}() {
 
 async function runRemoteAudit(packageName, format, installer) {
   if (format === 'text') console.log(chalk.blue(`\n🌍 Remote Audit [via ${installer}]: Pre-scanning '${packageName}'...`));
+
+  // Typosquat Check
+  const { checkTyposquat } = require('../src/utils/typo');
+  const typoMatch = checkTyposquat(packageName);
+  if (typoMatch && format === 'text') {
+    console.log(chalk.red.bold(`\n⚠️  TYPOSQUAT WARNING: '${packageName}' is very similar to '${typoMatch.target}'!`));
+    console.log(chalk.red(`   If you meant '${typoMatch.target}', stop now.\n`));
+  }
+
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zift-audit-'));
   try {
     cp.execSync(`npm pack ${packageName}`, { cwd: tmpDir, stdio: 'ignore' });
@@ -144,31 +157,97 @@ async function runRemoteAudit(packageName, format, installer) {
   } catch (err) { cleanupAndExit(tmpDir, 1); }
 }
 
-function handleFindings(findings, format, targetDir, skipExit = false) {
+async function runLocalScan(target, format) {
+  if (format === 'text') console.log(chalk.blue(`\n🔍 Scanning local directory: ${path.resolve(target)}`));
+  const scanner = new PackageScanner(target);
+  const results = await scanner.scan();
+
+  // Auditing lockfiles
+  const LockfileAuditor = require('../src/lockfile');
+  const auditor = new LockfileAuditor(target);
+  const lockfileFindings = auditor.audit();
+
+  handleFindings({ ...results, lockfileFindings }, format, target);
+}
+
+function handleFindings(data, format, targetDir, skipExit = false) {
+  const { results: findings, lifecycleScripts, lockfileFindings = [] } = data;
+
   if (format === 'json') {
-    process.stdout.write(JSON.stringify({ target: targetDir, findings, summary: { Critical: findings.filter(f => f.classification === 'Critical').length, High: findings.filter(f => f.classification === 'High').length, Medium: findings.filter(f => f.classification === 'Medium').length, Low: findings.filter(f => f.classification === 'Low').length } }, null, 2));
+    process.stdout.write(JSON.stringify({
+      target: targetDir,
+      findings,
+      lifecycleScripts,
+      lockfileFindings,
+      summary: getSummary(findings)
+    }, null, 2));
     if (!skipExit) process.exit(findings.some(f => f.score >= 90) ? 1 : 0);
     return;
   }
+
+  // Lifecycle Summary
+  if (Object.keys(lifecycleScripts).length > 0) {
+    console.log(chalk.bold('\n📦 Detected Lifecycle Scripts:'));
+    for (const [hook, cmd] of Object.entries(lifecycleScripts)) {
+      console.log(chalk.yellow(`  - ${hook}: `) + chalk.white(cmd));
+    }
+  }
+
+  // Lockfile Summary
+  if (lockfileFindings.length > 0) {
+    console.log(chalk.bold('\n🔒 Lockfile Security Audit:'));
+    lockfileFindings.forEach(f => {
+      const color = f.severity === 'High' ? chalk.red : chalk.yellow;
+      console.log(color(`  - [${f.severity}] ${f.package}: ${f.type} (${f.source})`));
+    });
+  }
+
   if (findings.length === 0) {
-    if (!skipExit) { console.log(chalk.green('\n✅ No suspicious patterns detected. All modules safe.')); process.exit(0); }
+    if (!skipExit) {
+      console.log(chalk.green('\n✅ No suspicious AST patterns detected.'));
+      process.exit(0);
+    }
     return;
   }
+
+  console.log(chalk.bold('\n🔍 Behavioral AST Findings:'));
   findings.forEach(f => {
     const color = { 'Critical': chalk.red.bold, 'High': chalk.red, 'Medium': chalk.yellow, 'Low': chalk.blue }[f.classification];
     console.log(color(`[${f.classification}] ${f.id} ${f.name} (Score: ${f.score})`));
     f.triggers.forEach(t => console.log(chalk.white(`  - ${t.type} in ${t.file}:${t.line} [${t.context}]`)));
     console.log('');
   });
-  if (!skipExit) process.exit(findings[0].score >= 90 ? 1 : 0);
+
+  if (!skipExit) process.exit(findings.some(f => f.score >= 90) ? 1 : 0);
+}
+
+function runInit() {
+  const config = {
+    severity: {
+      critical: 90,
+      high: 70,
+      medium: 50
+    },
+    ignore: ['node_modules', '.git', 'test', 'dist'],
+    parallel: true,
+    cache: true
+  };
+  fs.writeFileSync(path.join(process.cwd(), '.zift.json'), JSON.stringify(config, null, 2));
+  fs.writeFileSync(path.join(process.cwd(), '.ziftignore'), '# Add patterns to ignore here\nnode_modules\ndist\ncoverage\n');
+  console.log(chalk.green('\n✅ Initialized Zift configuration (.zift.json and .ziftignore)'));
 }
 
 function showHelp() {
-  console.log(chalk.blue.bold('\n🛡️  Zift - Universal Security Scanner\n'));
+  console.log(chalk.blue.bold('\n🛡️  Zift v2.0.0 - Intelligent Pre-install Security Gate\n'));
   console.log('Usage:');
   console.log('  zift setup           Secure npm, bun, and pnpm');
+  console.log('  zift init            Initialize configuration');
   console.log('  zift install <pkg>   Scan and install package');
-  console.log('  --bun / --pnpm       Use a specific installer');
+  console.log('  zift .               Scan current directory');
+  console.log('\nOptions:');
+  console.log('  --bun                Use Bun for installation');
+  console.log('  --pnpm               Use pnpm for installation');
+  console.log('  --format json        Output as JSON');
 }
 
 function cleanupAndExit(dir, code) {

@@ -1,0 +1,13 @@
+node_modules/
+.zift-cache/
+.npmrc
+*.log
+v1_launch_pack/
+tests/
+audit-space/
+zift-user-test/
+implementation_plan.md
+walkthrough.md
+task.md
+.system_generated/
+git_error.txt
