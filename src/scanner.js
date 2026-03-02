@@ -57,7 +57,8 @@ class PackageScanner {
                 MODULE_TAMPER: [],
                 REVERSE_SHELL_BEHAVIOR: [],
                 FINGERPRINT_SIGNAL: [],
-                PUBLISH_SINK: []
+                PUBLISH_SINK: [],
+                MANIFEST_MISMATCH: []
             },
             flows: []
         };
@@ -117,8 +118,20 @@ class PackageScanner {
         // Pass 2: Cross-File Taint Resolution
         this.resolveCrossFileTaint(allFacts);
 
-        const findings = this.engine.evaluate(allFacts, lifecycleFiles);
-        return this.formatFindings(findings);
+        // Load Manifest
+        let manifest = null;
+        try {
+            const manifestPath = path.join(this.packageDir, 'zift.json');
+            if (fs.existsSync(manifestPath)) {
+                manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+            }
+        } catch (e) { }
+
+        const findings = this.engine.evaluate(allFacts, lifecycleFiles, manifest);
+        return {
+            results: this.formatFindings(findings),
+            lifecycleScripts: this.detectedLifecycleScripts
+        };
     }
 
     resolveCrossFileTaint(allFacts) {
@@ -234,26 +247,23 @@ class PackageScanner {
     formatFindings(findings) {
         const sorted = findings.sort((a, b) => b.score - a.score);
 
-        return {
-            results: sorted.map(f => {
-                let classification = 'Low';
-                if (f.score >= 90) classification = 'Critical';
-                else if (f.score >= 70) classification = 'High';
-                else if (f.score >= 50) classification = 'Medium';
+        return sorted.map(f => {
+            let classification = 'Low';
+            if (f.score >= 90) classification = 'Critical';
+            else if (f.score >= 70) classification = 'High';
+            else if (f.score >= 50) classification = 'Medium';
 
-                return {
-                    ...f,
-                    classification,
-                    triggers: f.triggers.map(t => ({
-                        type: t.type,
-                        file: path.relative(this.packageDir, t.file),
-                        line: t.line,
-                        context: t.reason || t.callee || t.variable || t.path || t.url || t.context
-                    }))
-                };
-            }),
-            lifecycleScripts: this.detectedLifecycleScripts
-        };
+            return {
+                ...f,
+                classification,
+                triggers: f.triggers.map(t => ({
+                    type: t.type,
+                    file: path.relative(this.packageDir, t.file),
+                    line: t.line,
+                    context: t.reason || t.callee || t.variable || t.path || t.url || t.context
+                }))
+            };
+        });
     }
 }
 

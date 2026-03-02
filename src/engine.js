@@ -5,10 +5,18 @@ class SafetyEngine {
         this.results = [];
     }
 
-    evaluate(packageFacts, lifecycleFiles) {
+    evaluate(packageFacts, lifecycleFiles, manifest = null) {
         let findings = [];
 
-        // Process each rule
+        // 1. Process Manifest Violations (if manifest exists)
+        if (manifest) {
+            const manifestFails = this.validateManifest(packageFacts, manifest);
+            if (manifestFails.length > 0) {
+                packageFacts.facts.MANIFEST_MISMATCH = manifestFails;
+            }
+        }
+
+        // 2. Process each rule
         for (const rule of RULES) {
             const match = this.matchRule(rule, packageFacts, lifecycleFiles);
             if (match) {
@@ -20,6 +28,37 @@ class SafetyEngine {
         findings.sort((a, b) => (b.score - a.score) || (b.priority - a.priority));
 
         return findings;
+    }
+
+    validateManifest(packageFacts, manifest) {
+        const { facts } = packageFacts;
+        const violations = [];
+
+        // Check Network
+        if (manifest.capabilities && manifest.capabilities.network) {
+            const networkFacts = facts.NETWORK_SINK || [];
+            if (!manifest.capabilities.network.enabled && networkFacts.length > 0) {
+                networkFacts.forEach(f => violations.push({ ...f, context: 'UNAUTHORIZED_NETWORK_SINK' }));
+            }
+        }
+
+        // Check Shell
+        if (manifest.capabilities && manifest.capabilities.shell) {
+            const shellFacts = facts.SHELL_EXECUTION || [];
+            if (!manifest.capabilities.shell.enabled && shellFacts.length > 0) {
+                shellFacts.forEach(f => violations.push({ ...f, context: 'UNAUTHORIZED_SHELL_EXECUTION' }));
+            }
+        }
+
+        // Check Filesystem (Write)
+        if (manifest.capabilities && manifest.capabilities.filesystem) {
+            const writeFacts = facts.FILE_WRITE_STARTUP || [];
+            if (!manifest.capabilities.filesystem.write && writeFacts.length > 0) {
+                writeFacts.forEach(f => violations.push({ ...f, context: 'UNAUTHORIZED_FILE_WRITE' }));
+            }
+        }
+
+        return violations;
     }
 
     matchRule(rule, packageFacts, lifecycleFiles) {

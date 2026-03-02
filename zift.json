@@ -1,0 +1,35 @@
+{
+    "name": "@7nsane/zift",
+    "version": "4.3.1",
+    "capabilities": {
+        "network": {
+            "allowed": [
+                "registry.npmjs.org"
+            ],
+            "description": "Required for remote audits and publishing"
+        },
+        "filesystem": {
+            "read": [
+                "."
+            ],
+            "write": [
+                ".zift.json",
+                ".ziftignore",
+                "package.json"
+            ],
+            "sensitive": false
+        },
+        "shell": {
+            "enabled": true,
+            "allowList": [
+                "npm",
+                "tar",
+                "ls",
+                "dir",
+                "whoami",
+                "node -v"
+            ]
+        }
+    },
+    "policy": "strict"
+}

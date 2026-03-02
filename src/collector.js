@@ -41,11 +41,23 @@ class ASTCollector {
             MODULE_TAMPER: [],
             REVERSE_SHELL_BEHAVIOR: [],
             FINGERPRINT_SIGNAL: [],
-            PUBLISH_SINK: []
+            PUBLISH_SINK: [],
+            MANIFEST_MISMATCH: []
         };
         const flows = [];
         const sourceCode = code;
         let envAccessCount = 0;
+
+        // v6.0 Heuristic De-packer (obfuscator.io)
+        const obfuscatorPattern = /var\s+(_0x[a-f0-9]+)\s*=\s*\[.*\];/;
+        if (obfuscatorPattern.test(code)) {
+            facts.OBFUSCATION.push({
+                file: filePath,
+                line: 1,
+                reason: 'Standard obfuscator.io pattern detected (String Array)',
+                heuristic: 'obfuscator-io'
+            });
+        }
 
         let ast;
         try {

@@ -267,13 +267,23 @@ const RULES = [
         priority: 1,
         baseScore: 90,
         description: 'Detection of remote payload fetching specifically during package install/lifecycle scripts.'
+    },
+    {
+        id: 'ZFT-030',
+        alias: 'MANIFEST_VIOLATION',
+        name: 'Behavioral Manifest Violation',
+        requires: ['MANIFEST_MISMATCH'],
+        priority: 1,
+        baseScore: 100,
+        description: 'Critical detection where a package performs an action NOT AUTHORIZED in its zift.json manifest.'
     }
 ];
 
+// v4.3.0 update: Added categories and sequence metadata
 const CATEGORIES = {
     SOURCES: ['ENV_READ', 'FILE_READ_SENSITIVE', 'MASS_ENV_ACCESS', 'CREDENTIAL_FILE_ACCESS', 'DISCORD_STORAGE_ACCESS', 'CICD_SECRET_ACCESS'],
     SINKS: ['NETWORK_SINK', 'DNS_SINK', 'RAW_SOCKET_SINK', 'DYNAMIC_EXECUTION', 'SHELL_EXECUTION', 'DYNAMIC_REQUIRE', 'WEBHOOK_SINK', 'WIPER_OPERATION', 'REGISTRY_TAMPER', 'MODULE_TAMPER', 'REVERSE_SHELL_BEHAVIOR', 'PUBLISH_SINK'],
-    SIGNALS: ['OBFUSCATION', 'ENCODER_USE', 'REMOTE_FETCH_SIGNAL', 'PIPE_TO_SHELL_SIGNAL', 'NATIVE_BINARY_DETECTED', 'OPAQUE_STRING_SKIP', 'NON_DETERMINISTIC_SINK', 'EVASION_ENVIRONMENT_CHECK', 'WALLET_HOOK', 'FINGERPRINT_SIGNAL'],
+    SIGNALS: ['OBFUSCATION', 'ENCODER_USE', 'REMOTE_FETCH_SIGNAL', 'PIPE_TO_SHELL_SIGNAL', 'NATIVE_BINARY_DETECTED', 'OPAQUE_STRING_SKIP', 'NON_DETERMINISTIC_SINK', 'EVASION_ENVIRONMENT_CHECK', 'WALLET_HOOK', 'FINGERPRINT_SIGNAL', 'MANIFEST_MISMATCH'],
     PERSISTENCE: ['FILE_WRITE_STARTUP'],
     CONTEXT: ['LIFECYCLE_CONTEXT']
 };

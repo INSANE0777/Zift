@@ -6,7 +6,18 @@ const diagnostics = require('node:diagnostics_channel');
  */
 
 function setupShield() {
-    console.warn('🛡️ ZIFT SHIELD ACTIVE: Monitoring suspicious runtime activity...');
+    let manifest = null;
+    try {
+        const path = require('node:path');
+        const fs = require('node:fs');
+        const manifestPath = path.join(process.cwd(), 'zift.json');
+        if (fs.existsSync(manifestPath)) {
+            manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+            console.warn(`[ZIFT-SHIELD] 📜 Zero-Trust Manifest Loaded: ${manifest.name}@${manifest.version}`);
+        }
+    } catch (e) {
+        console.error('[ZIFT-SHIELD] ⚠️ Error loading manifest:', e.message);
+    }
 
     // 1. Monitor Network Activity via diagnostics_channel
     const netChannel = diagnostics.channel('net.client.socket.request.start');
@@ -16,7 +27,15 @@ function setupShield() {
 
     // 2. Wrap Child Process (for shell command execution) - ACTIVE BLOCKING
     const cp = require('node:child_process');
-    const ALLOWED_COMMANDS = ['npm install', 'npm audit', 'ls', 'dir', 'whoami', 'node -v'];
+    let ALLOWED_COMMANDS = ['npm install', 'npm audit', 'ls', 'dir', 'whoami', 'node -v'];
+
+    if (manifest && manifest.capabilities && manifest.capabilities.shell) {
+        if (manifest.capabilities.shell.enabled === false) {
+            ALLOWED_COMMANDS = [];
+        } else if (Array.isArray(manifest.capabilities.shell.allowList)) {
+            ALLOWED_COMMANDS = manifest.capabilities.shell.allowList;
+        }
+    }
 
     ['exec', 'spawn', 'execSync', 'spawnSync'].forEach(method => {
         const original = cp[method];
@@ -51,7 +70,17 @@ function setupShield() {
 
     // 2.5 Filesystem Protection
     const fs = require('node:fs');
-    const PROTECTED_FILES = ['.env', '.npmrc', 'shadow', 'id_rsa', 'id_ed25519'];
+    let PROTECTED_FILES = ['.env', '.npmrc', 'shadow', 'id_rsa', 'id_ed25519'];
+    let blockAllFiles = false;
+
+    if (manifest && manifest.capabilities && manifest.capabilities.filesystem) {
+        if (manifest.capabilities.filesystem.read === false) {
+            blockAllFiles = true;
+        } else if (Array.isArray(manifest.capabilities.filesystem.read)) {
+            // Remove allowed paths from PROTECTED_FILES if they match exactly
+            PROTECTED_FILES = PROTECTED_FILES.filter(f => !manifest.capabilities.filesystem.read.includes(f));
+        }
+    }
 
     const fsMethods = ['readFile', 'readFileSync', 'promises.readFile', 'createReadStream'];
     fsMethods.forEach(methodPath => {
@@ -69,10 +98,10 @@ function setupShield() {
             const pathArg = args[0];
             const pathStr = typeof pathArg === 'string' ? pathArg : (pathArg instanceof Buffer ? pathArg.toString() : String(pathArg));
 
-            if (PROTECTED_FILES.some(f => pathStr.includes(f))) {
-                console.error(`[ZIFT-SHIELD] ❌ BLOCKED: Access to protected file: "${pathStr}"`);
+            if (blockAllFiles || PROTECTED_FILES.some(f => pathStr.includes(f))) {
+                console.error(`[ZIFT-SHIELD] ❌ BLOCKED: Access to restricted file: "${pathStr}"`);
                 if (process.env.ZIFT_ENFORCE === 'true') {
-                    throw new Error(`[ZIFT-SHIELD] Access Denied: Protected file "${pathStr}" cannot be read.`);
+                    throw new Error(`[ZIFT-SHIELD] Access Denied: File path "${pathStr}" is restricted by Zero-Trust policy.`);
                 }
             }
             return original.apply(this, args);
